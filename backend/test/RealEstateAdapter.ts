@@ -12,7 +12,7 @@ async function deployRealEstateFixture() {
   const accessManager = await ethers.deployContract("AccessManager", [admin.address]);
   const treasury = await ethers.deployContract("Treasury", [accessManager.target]);
   const vaultManager = await ethers.deployContract("VaultManager", [accessManager.target, treasury.target]);
-  const factory = await ethers.deployContract("WrappedTokenFactory", [accessManager.target, vaultManager.target]);
+  const factory = await ethers.deployContract("RealEstateAssetFactory", [accessManager.target, vaultManager.target]);
   const gateway = await ethers.deployContract("InvestOrGateway", [accessManager.target, vaultManager.target]);
 
   await accessManager.grantRole(await accessManager.MINTER_ROLE(), vaultManager.target);

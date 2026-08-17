@@ -5,7 +5,7 @@ import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol"
 
 /// @notice Central registry of roles for the whole Invest'Or Gateway protocol.
 /// @dev Every other contract (VaultManager, GLDToken, OracleManager, Treasury,
-///      WrappedTokenFactory, InvestOrGateway, asset adapters) holds an immutable reference
+///      the asset factories, InvestOrGateway, asset adapters) holds an immutable reference
 ///      to this contract and checks roles here via AccessManaged, instead of managing its
 ///      own AccessControl. Permissions can be granted, revoked or rotated across the entire
 ///      protocol from a single place.
@@ -25,7 +25,8 @@ contract AccessManager is AccessControl {
     /// @notice Can pause or unpause user-facing entry points (Gateway, VaultManager).
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
-    /// @notice Held exclusively by WrappedTokenFactory; allows registering new adapters/tokens.
+    /// @notice Held by every asset factory (GoldAssetFactory, SilverAssetFactory,
+    ///         RealEstateAssetFactory...); allows registering new adapters/tokens.
     bytes32 public constant FACTORY_ROLE = keccak256("FACTORY_ROLE");
 
     /// @notice Held exclusively by InvestOrGateway; lets it call VaultManager's depositFor/

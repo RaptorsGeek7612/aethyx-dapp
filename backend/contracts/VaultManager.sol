@@ -48,7 +48,7 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
     }
 
     /// @notice Registers a new adapter/wrapped-token pair under `assetId`. Only ever called by
-    ///         WrappedTokenFactory, right after it deploys both contracts together.
+    ///         one of the asset factories, right after it deploys both contracts together.
     function registerAsset(
         bytes32 assetId,
         address adapter,

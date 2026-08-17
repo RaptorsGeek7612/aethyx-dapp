@@ -1,0 +1,12 @@
+{
+  "InvestOrGateway#AccessManager": "0xc10B6c37Ff4041a4F1a583Ef15E9f6d2bE290237",
+  "InvestOrGateway#OracleManager": "0x5a63a28Bb0a2CFe8c47D2a2532E5713818d4b95A",
+  "InvestOrGateway#Treasury": "0x328A3dA508917d070FB4052d2ED62794CcA68312",
+  "InvestOrGateway#priceSourcePrimary": "0x1803aE26F258e45c2d461F95A768ec1E9DC2c36D",
+  "InvestOrGateway#priceSourceSecondary": "0x3B8f9135E7FC8dcF67B2DF8D73c23C9f68931215",
+  "InvestOrGateway#VaultManager": "0x9B963bf48d23434B6499593cB421f7a147041Fc2",
+  "InvestOrGateway#GoldAssetFactory": "0x50Ab15B0E2781b48Bd9035cB543Da0C4d1877ab5",
+  "InvestOrGateway#InvestOrGateway": "0x10C5FfF00b81977f4eEbe24A392d59FCb35B4287",
+  "InvestOrGateway#RealEstateAssetFactory": "0xccf12a4a35d500C399223a1aB47e3e8D00c72793",
+  "InvestOrGateway#SilverAssetFactory": "0x04d23917f214fc2Cd80BB5e71f8327102681E91e"
+}
