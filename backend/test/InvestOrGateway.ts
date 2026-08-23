@@ -19,7 +19,7 @@ async function deployProtocolFixture() {
 
   await accessManager.grantRole(await accessManager.MINTER_ROLE(), vaultManager.target);
   await accessManager.grantRole(await accessManager.FACTORY_ROLE(), factory.target);
-  await accessManager.grantRole(await accessManager.ROUTER_ROLE(), gateway.target);
+  await accessManager.lockRouterRole(gateway.target);
   await accessManager.grantRole(await accessManager.ASSET_MANAGER_ROLE(), admin.address);
   await accessManager.grantRole(await accessManager.PAUSER_ROLE(), admin.address);
 

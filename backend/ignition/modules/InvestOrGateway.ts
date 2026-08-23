@@ -38,8 +38,10 @@ export default buildModule("InvestOrGateway", (m) => {
     id: "grantFactoryRoleToRealEstateFactory",
   });
 
-  const routerRole = m.staticCall(accessManager, "ROUTER_ROLE", [], 0, { id: "readRouterRole" });
-  m.call(accessManager, "grantRole", [routerRole, gateway], { id: "grantRouterRoleToGateway" });
+  // Grants ROUTER_ROLE to the gateway and immediately locks it — see AccessManager.sol's
+  // natspec on lockRouterRole/ROUTER_ROLE_ADMIN. Nothing can ever grant ROUTER_ROLE again
+  // after this, not even DEFAULT_ADMIN_ROLE.
+  m.call(accessManager, "lockRouterRole", [gateway], { id: "lockRouterRole" });
 
   const assetManagerRole = m.staticCall(accessManager, "ASSET_MANAGER_ROLE", [], 0, { id: "readAssetManagerRole" });
   const grantAssetManagerRoleToAdmin = m.call(accessManager, "grantRole", [assetManagerRole, initialAdmin], {
