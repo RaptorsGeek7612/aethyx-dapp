@@ -1,65 +1,101 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.35;
 
-import { IAggregatorV3 } from "../interfaces/IAggregatorV3.sol";
+/**
+ * @title MockAggregatorV3
+ * @notice Reproduit l'interface Chainlink pour tester la fiabilité de l'oracle extérieur.
+ * @dev Sert uniquement aux tests. Permet de forcer les cas pathologiques que Chainlink
+ *      ne produira jamais sur demande : prix négatif, round incomplet, donnée périmée,
+ *      feed qui revert.
+ */
+contract MockAggregatorV3 {
+    error FeedDown();
 
-/// @notice Minimal Chainlink AggregatorV3Interface test double. Lets tests drive every
-///         failure mode ChainlinkPriceSource has to defend against: a negative or zero
-///         answer, a round that never finalized, a round the aggregator proxy carries over
-///         unchanged from an earlier answer, and the feed reverting outright.
-contract MockAggregatorV3 is IAggregatorV3 {
-    uint8 private immutable _decimals;
+    uint8 private _decimals;
+    string private _description;
+
     uint80 private _roundId;
     int256 private _answer;
+    uint256 private _startedAt;
     uint256 private _updatedAt;
     uint80 private _answeredInRound;
-    bool private _shouldRevert;
 
-    constructor(uint8 decimals_, int256 initialAnswer_) {
+    bool public shouldRevert;
+
+    constructor(uint8 decimals_, int256 initialAnswer) {
         _decimals = decimals_;
-        push(initialAnswer_);
+        _description = "MockAggregatorV3";
+        _set(1, initialAnswer, block.timestamp, 1);
     }
+
+    /*//////////////////////////////////////////////////////////////
+                          CHAINLINK INTERFACE
+    //////////////////////////////////////////////////////////////*/
 
     function decimals() external view returns (uint8) {
         return _decimals;
     }
 
-    /// @notice Normal update: a fully finalized round with a fresh timestamp.
-    function push(int256 answer_) public {
-        _roundId += 1;
-        _answer = answer_;
-        _updatedAt = block.timestamp;
-        _answeredInRound = _roundId;
+    function description() external view returns (string memory) {
+        return _description;
     }
 
-    /// @notice A round that started but was never answered — Chainlink reports `updatedAt`
-    ///         as 0 in this case.
-    function pushIncomplete(int256 answer_) external {
-        _roundId += 1;
-        _answer = answer_;
-        _updatedAt = 0;
-        _answeredInRound = _roundId;
-    }
-
-    /// @notice A round the aggregator proxy carries over unchanged from an earlier, stale
-    ///         answer — `answeredInRound` lags behind the current `roundId`.
-    function pushCarriedOver(int256 answer_) external {
-        _roundId += 1;
-        _answer = answer_;
-        _updatedAt = block.timestamp;
-        _answeredInRound = _roundId - 1;
-    }
-
-    function setShouldRevert(bool shouldRevert_) external {
-        _shouldRevert = shouldRevert_;
+    function version() external pure returns (uint256) {
+        return 4;
     }
 
     function latestRoundData()
         external
         view
-        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)
+        returns (uint80, int256, uint256, uint256, uint80)
     {
-        if (_shouldRevert) revert("MockAggregatorV3: feed down");
-        return (_roundId, _answer, _updatedAt, _updatedAt, _answeredInRound);
+        if (shouldRevert) revert FeedDown();
+        return (_roundId, _answer, _startedAt, _updatedAt, _answeredInRound);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                             TEST HELPERS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Publication normale : round incrémenté, horodatage courant.
+    function push(int256 answer) external {
+        uint80 next = _roundId + 1;
+        _set(next, answer, block.timestamp, next);
+    }
+
+    /// @notice Force une donnée périmée de `age` secondes.
+    function pushStale(int256 answer, uint256 age) external {
+        uint80 next = _roundId + 1;
+        _set(next, answer, block.timestamp - age, next);
+    }
+
+    /// @notice Round jamais finalisé : updatedAt reste à zéro.
+    function pushIncomplete(int256 answer) external {
+        uint80 next = _roundId + 1;
+        _set(next, answer, 0, next);
+    }
+
+    /// @notice Réponse reportée d'un round antérieur (answeredInRound < roundId).
+    function pushCarriedOver(int256 answer) external {
+        uint80 next = _roundId + 1;
+        _set(next, answer, block.timestamp, _roundId);
+    }
+
+    /// @notice Simule un feed hors service.
+    function setShouldRevert(bool value) external {
+        shouldRevert = value;
+    }
+
+    function _set(
+        uint80 roundId_,
+        int256 answer_,
+        uint256 updatedAt_,
+        uint80 answeredInRound_
+    ) private {
+        _roundId = roundId_;
+        _answer = answer_;
+        _startedAt = updatedAt_;
+        _updatedAt = updatedAt_;
+        _answeredInRound = answeredInRound_;
     }
 }
