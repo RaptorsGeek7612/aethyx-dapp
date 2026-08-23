@@ -78,10 +78,15 @@ contract OracleManager is AccessManaged {
         worstUpdatedAt = type(uint256).max;
 
         for (uint256 i = 0; i < len; i++) {
-            (uint256 p, uint256 updatedAt) = IPriceSource(sources[i]).latestPrice(assetId);
-            if (p == 0 || block.timestamp - updatedAt > config.maxStaleness) continue;
-            fresh[freshCount++] = p;
-            if (updatedAt < worstUpdatedAt) worstUpdatedAt = updatedAt;
+            // A source that reverts (feed down, stale round, bad data...) is excluded exactly
+            // like a stale or zero price would be — it never takes the whole aggregation down.
+            try IPriceSource(sources[i]).latestPrice(assetId) returns (uint256 p, uint256 updatedAt) {
+                if (p == 0 || block.timestamp - updatedAt > config.maxStaleness) continue;
+                fresh[freshCount++] = p;
+                if (updatedAt < worstUpdatedAt) worstUpdatedAt = updatedAt;
+            } catch {
+                continue;
+            }
         }
 
         if (freshCount < config.minSources) {
