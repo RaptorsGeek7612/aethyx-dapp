@@ -20,6 +20,17 @@ contract MockPriceSource is IPriceSource {
     }
 }
 
+/// @notice Always reverts — a broken or maliciously bricked feed, distinct from a merely stale
+///         or zero-priced one. OracleManager.getPrice wraps every source call in try/catch
+///         specifically so a single dead source like this can never DoS the whole aggregation.
+contract RevertingPriceSource is IPriceSource {
+    error AlwaysReverts();
+
+    function latestPrice(bytes32) external pure returns (uint256, uint256) {
+        revert AlwaysReverts();
+    }
+}
+
 contract OracleManagerTest is Test {
     bytes32 constant GOLD = keccak256("GOLD");
     uint256 constant MAX_STALENESS = 1 hours;
@@ -57,7 +68,7 @@ contract OracleManagerTest is Test {
         _addSource(98e18);
         _addSource(104e18);
         // sorted: 98, 100, 102, 104 -> median = (100 + 102) / 2 = 101
-        (uint256 price,) = oracle.getPrice(GOLD);
+        (uint256 price, ) = oracle.getPrice(GOLD);
         assertEq(price, 101e18);
     }
 
@@ -80,6 +91,32 @@ contract OracleManagerTest is Test {
         _addSource(100e18);
         _addSource(200e18); // 100% apart, well beyond the 10% max deviation
         vm.expectRevert(abi.encodeWithSelector(OracleManager.PriceDeviationTooHigh.selector, GOLD, 100e18, 200e18));
+        oracle.getPrice(GOLD);
+    }
+
+    /// @notice A source that reverts on every call (feed down, bricked, deliberately malicious)
+    ///         must not be able to deny service to the whole aggregation: it's excluded exactly
+    ///         like a stale or zero-priced source, and the median is still produced from
+    ///         whatever fresh sources remain.
+    function test_ExcludesRevertingSourceWithoutBlockingAggregation() public {
+        _addSource(100e18);
+        _addSource(102e18);
+        RevertingPriceSource brokenSource = new RevertingPriceSource();
+        oracle.addPriceSource(GOLD, address(brokenSource));
+
+        (uint256 price, ) = oracle.getPrice(GOLD);
+        assertEq(price, 101e18);
+    }
+
+    /// @notice If enough sources are reverting that fresh sources fall below the quorum, the
+    ///         call still reverts with InsufficientFreshSources rather than silently degrading
+    ///         to a single-source (or zero-source) price.
+    function test_RevertsWhenRevertingSourcesBreakQuorum() public {
+        _addSource(100e18);
+        RevertingPriceSource brokenSource = new RevertingPriceSource();
+        oracle.addPriceSource(GOLD, address(brokenSource));
+
+        vm.expectRevert(abi.encodeWithSelector(OracleManager.InsufficientFreshSources.selector, GOLD, 1, MIN_SOURCES));
         oracle.getPrice(GOLD);
     }
 }
