@@ -1,524 +1,524 @@
 // Auto-extracted from backend/artifacts. Regenerate after changing the source contract.
 export const vaultManagerAbi = [
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "address",
-        "name": "accessManager_",
-        "type": "address"
+        internalType: "address",
+        name: "accessManager_",
+        type: "address",
       },
       {
-        "internalType": "address",
-        "name": "treasury_",
-        "type": "address"
-      }
+        internalType: "address",
+        name: "treasury_",
+        type: "address",
+      },
     ],
-    "stateMutability": "nonpayable",
-    "type": "constructor"
+    stateMutability: "nonpayable",
+    type: "constructor",
   },
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "bytes32",
-        "name": "assetId",
-        "type": "bytes32"
-      }
+        internalType: "bytes32",
+        name: "assetId",
+        type: "bytes32",
+      },
     ],
-    "name": "AssetAlreadyRegistered",
-    "type": "error"
+    name: "AssetAlreadyRegistered",
+    type: "error",
   },
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "bytes32",
-        "name": "assetId",
-        "type": "bytes32"
-      }
+        internalType: "bytes32",
+        name: "assetId",
+        type: "bytes32",
+      },
     ],
-    "name": "AssetNotActive",
-    "type": "error"
+    name: "AssetNotActive",
+    type: "error",
   },
   {
-    "inputs": [],
-    "name": "EnforcedPause",
-    "type": "error"
+    inputs: [],
+    name: "EnforcedPause",
+    type: "error",
   },
   {
-    "inputs": [],
-    "name": "ExpectedPause",
-    "type": "error"
+    inputs: [],
+    name: "ExpectedPause",
+    type: "error",
   },
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "uint16",
-        "name": "feeBps",
-        "type": "uint16"
-      }
+        internalType: "uint16",
+        name: "feeBps",
+        type: "uint16",
+      },
     ],
-    "name": "FeeTooHigh",
-    "type": "error"
+    name: "FeeTooHigh",
+    type: "error",
   },
   {
-    "inputs": [],
-    "name": "ReentrancyGuardReentrantCall",
-    "type": "error"
+    inputs: [],
+    name: "ReentrancyGuardReentrantCall",
+    type: "error",
   },
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "address",
-        "name": "account",
-        "type": "address"
+        internalType: "address",
+        name: "account",
+        type: "address",
       },
       {
-        "internalType": "bytes32",
-        "name": "role",
-        "type": "bytes32"
-      }
+        internalType: "bytes32",
+        name: "role",
+        type: "bytes32",
+      },
     ],
-    "name": "Unauthorized",
-    "type": "error"
+    name: "Unauthorized",
+    type: "error",
   },
   {
-    "anonymous": false,
-    "inputs": [
+    anonymous: false,
+    inputs: [
       {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "assetId",
-        "type": "bytes32"
+        indexed: true,
+        internalType: "bytes32",
+        name: "assetId",
+        type: "bytes32",
       },
       {
-        "indexed": false,
-        "internalType": "bool",
-        "name": "active",
-        "type": "bool"
-      }
+        indexed: false,
+        internalType: "bool",
+        name: "active",
+        type: "bool",
+      },
     ],
-    "name": "AssetActiveSet",
-    "type": "event"
+    name: "AssetActiveSet",
+    type: "event",
   },
   {
-    "anonymous": false,
-    "inputs": [
+    anonymous: false,
+    inputs: [
       {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "assetId",
-        "type": "bytes32"
+        indexed: true,
+        internalType: "bytes32",
+        name: "assetId",
+        type: "bytes32",
       },
       {
-        "indexed": false,
-        "internalType": "uint16",
-        "name": "depositFeeBps",
-        "type": "uint16"
+        indexed: false,
+        internalType: "uint16",
+        name: "depositFeeBps",
+        type: "uint16",
       },
       {
-        "indexed": false,
-        "internalType": "uint16",
-        "name": "redeemFeeBps",
-        "type": "uint16"
-      }
+        indexed: false,
+        internalType: "uint16",
+        name: "redeemFeeBps",
+        type: "uint16",
+      },
     ],
-    "name": "AssetFeesSet",
-    "type": "event"
+    name: "AssetFeesSet",
+    type: "event",
   },
   {
-    "anonymous": false,
-    "inputs": [
+    anonymous: false,
+    inputs: [
       {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "assetId",
-        "type": "bytes32"
+        indexed: true,
+        internalType: "bytes32",
+        name: "assetId",
+        type: "bytes32",
       },
       {
-        "indexed": true,
-        "internalType": "address",
-        "name": "adapter",
-        "type": "address"
+        indexed: true,
+        internalType: "address",
+        name: "adapter",
+        type: "address",
       },
       {
-        "indexed": true,
-        "internalType": "address",
-        "name": "wrappedToken",
-        "type": "address"
-      }
+        indexed: true,
+        internalType: "address",
+        name: "wrappedToken",
+        type: "address",
+      },
     ],
-    "name": "AssetRegistered",
-    "type": "event"
+    name: "AssetRegistered",
+    type: "event",
   },
   {
-    "anonymous": false,
-    "inputs": [
+    anonymous: false,
+    inputs: [
       {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "assetId",
-        "type": "bytes32"
+        indexed: true,
+        internalType: "bytes32",
+        name: "assetId",
+        type: "bytes32",
       },
       {
-        "indexed": true,
-        "internalType": "address",
-        "name": "user",
-        "type": "address"
+        indexed: true,
+        internalType: "address",
+        name: "user",
+        type: "address",
       },
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "underlyingAmount",
-        "type": "uint256"
+        indexed: false,
+        internalType: "uint256",
+        name: "underlyingAmount",
+        type: "uint256",
       },
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "mintedAmount",
-        "type": "uint256"
+        indexed: false,
+        internalType: "uint256",
+        name: "mintedAmount",
+        type: "uint256",
       },
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "feeAmount",
-        "type": "uint256"
-      }
+        indexed: false,
+        internalType: "uint256",
+        name: "feeAmount",
+        type: "uint256",
+      },
     ],
-    "name": "Deposited",
-    "type": "event"
+    name: "Deposited",
+    type: "event",
   },
   {
-    "anonymous": false,
-    "inputs": [
+    anonymous: false,
+    inputs: [
       {
-        "indexed": false,
-        "internalType": "address",
-        "name": "account",
-        "type": "address"
-      }
+        indexed: false,
+        internalType: "address",
+        name: "account",
+        type: "address",
+      },
     ],
-    "name": "Paused",
-    "type": "event"
+    name: "Paused",
+    type: "event",
   },
   {
-    "anonymous": false,
-    "inputs": [
+    anonymous: false,
+    inputs: [
       {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "assetId",
-        "type": "bytes32"
+        indexed: true,
+        internalType: "bytes32",
+        name: "assetId",
+        type: "bytes32",
       },
       {
-        "indexed": true,
-        "internalType": "address",
-        "name": "user",
-        "type": "address"
+        indexed: true,
+        internalType: "address",
+        name: "user",
+        type: "address",
       },
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "wrappedAmount",
-        "type": "uint256"
+        indexed: false,
+        internalType: "uint256",
+        name: "wrappedAmount",
+        type: "uint256",
       },
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "underlyingAmount",
-        "type": "uint256"
+        indexed: false,
+        internalType: "uint256",
+        name: "underlyingAmount",
+        type: "uint256",
       },
       {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "feeAmount",
-        "type": "uint256"
-      }
+        indexed: false,
+        internalType: "uint256",
+        name: "feeAmount",
+        type: "uint256",
+      },
     ],
-    "name": "Redeemed",
-    "type": "event"
+    name: "Redeemed",
+    type: "event",
   },
   {
-    "anonymous": false,
-    "inputs": [
+    anonymous: false,
+    inputs: [
       {
-        "indexed": false,
-        "internalType": "address",
-        "name": "account",
-        "type": "address"
-      }
+        indexed: false,
+        internalType: "address",
+        name: "account",
+        type: "address",
+      },
     ],
-    "name": "Unpaused",
-    "type": "event"
+    name: "Unpaused",
+    type: "event",
   },
   {
-    "inputs": [],
-    "name": "accessManager",
-    "outputs": [
+    inputs: [],
+    name: "accessManager",
+    outputs: [
       {
-        "internalType": "contract AccessManager",
-        "name": "",
-        "type": "address"
-      }
+        internalType: "contract AccessManager",
+        name: "",
+        type: "address",
+      },
     ],
-    "stateMutability": "view",
-    "type": "function"
+    stateMutability: "view",
+    type: "function",
   },
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "bytes32",
-        "name": "assetId",
-        "type": "bytes32"
-      }
+        internalType: "bytes32",
+        name: "assetId",
+        type: "bytes32",
+      },
     ],
-    "name": "assets",
-    "outputs": [
+    name: "assets",
+    outputs: [
       {
-        "internalType": "contract AssetAdapter",
-        "name": "adapter",
-        "type": "address"
+        internalType: "contract AssetAdapter",
+        name: "adapter",
+        type: "address",
       },
       {
-        "internalType": "contract IWrappedToken",
-        "name": "wrappedToken",
-        "type": "address"
+        internalType: "contract IWrappedToken",
+        name: "wrappedToken",
+        type: "address",
       },
       {
-        "internalType": "uint16",
-        "name": "depositFeeBps",
-        "type": "uint16"
+        internalType: "uint16",
+        name: "depositFeeBps",
+        type: "uint16",
       },
       {
-        "internalType": "uint16",
-        "name": "redeemFeeBps",
-        "type": "uint16"
+        internalType: "uint16",
+        name: "redeemFeeBps",
+        type: "uint16",
       },
       {
-        "internalType": "bool",
-        "name": "active",
-        "type": "bool"
-      }
+        internalType: "bool",
+        name: "active",
+        type: "bool",
+      },
     ],
-    "stateMutability": "view",
-    "type": "function"
+    stateMutability: "view",
+    type: "function",
   },
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "bytes32",
-        "name": "assetId",
-        "type": "bytes32"
+        internalType: "bytes32",
+        name: "assetId",
+        type: "bytes32",
       },
       {
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
-      }
+        internalType: "uint256",
+        name: "amount",
+        type: "uint256",
+      },
     ],
-    "name": "deposit",
-    "outputs": [
+    name: "deposit",
+    outputs: [
       {
-        "internalType": "uint256",
-        "name": "mintedAmount",
-        "type": "uint256"
-      }
+        internalType: "uint256",
+        name: "mintedAmount",
+        type: "uint256",
+      },
     ],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    stateMutability: "nonpayable",
+    type: "function",
   },
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "bytes32",
-        "name": "assetId",
-        "type": "bytes32"
+        internalType: "bytes32",
+        name: "assetId",
+        type: "bytes32",
       },
       {
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
+        internalType: "uint256",
+        name: "amount",
+        type: "uint256",
       },
       {
-        "internalType": "address",
-        "name": "depositor",
-        "type": "address"
-      }
+        internalType: "address",
+        name: "depositor",
+        type: "address",
+      },
     ],
-    "name": "depositFor",
-    "outputs": [
+    name: "depositFor",
+    outputs: [
       {
-        "internalType": "uint256",
-        "name": "mintedAmount",
-        "type": "uint256"
-      }
+        internalType: "uint256",
+        name: "mintedAmount",
+        type: "uint256",
+      },
     ],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    stateMutability: "nonpayable",
+    type: "function",
   },
   {
-    "inputs": [],
-    "name": "pause",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    inputs: [],
+    name: "pause",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
   },
   {
-    "inputs": [],
-    "name": "paused",
-    "outputs": [
+    inputs: [],
+    name: "paused",
+    outputs: [
       {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
+        internalType: "bool",
+        name: "",
+        type: "bool",
+      },
     ],
-    "stateMutability": "view",
-    "type": "function"
+    stateMutability: "view",
+    type: "function",
   },
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "bytes32",
-        "name": "assetId",
-        "type": "bytes32"
+        internalType: "bytes32",
+        name: "assetId",
+        type: "bytes32",
       },
       {
-        "internalType": "uint256",
-        "name": "wrappedAmount",
-        "type": "uint256"
-      }
+        internalType: "uint256",
+        name: "wrappedAmount",
+        type: "uint256",
+      },
     ],
-    "name": "redeem",
-    "outputs": [
+    name: "redeem",
+    outputs: [
       {
-        "internalType": "uint256",
-        "name": "underlyingAmount",
-        "type": "uint256"
-      }
+        internalType: "uint256",
+        name: "underlyingAmount",
+        type: "uint256",
+      },
     ],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    stateMutability: "nonpayable",
+    type: "function",
   },
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "bytes32",
-        "name": "assetId",
-        "type": "bytes32"
+        internalType: "bytes32",
+        name: "assetId",
+        type: "bytes32",
       },
       {
-        "internalType": "uint256",
-        "name": "wrappedAmount",
-        "type": "uint256"
+        internalType: "uint256",
+        name: "wrappedAmount",
+        type: "uint256",
       },
       {
-        "internalType": "address",
-        "name": "redeemer",
-        "type": "address"
-      }
+        internalType: "address",
+        name: "redeemer",
+        type: "address",
+      },
     ],
-    "name": "redeemFor",
-    "outputs": [
+    name: "redeemFor",
+    outputs: [
       {
-        "internalType": "uint256",
-        "name": "underlyingAmount",
-        "type": "uint256"
-      }
+        internalType: "uint256",
+        name: "underlyingAmount",
+        type: "uint256",
+      },
     ],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    stateMutability: "nonpayable",
+    type: "function",
   },
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "bytes32",
-        "name": "assetId",
-        "type": "bytes32"
+        internalType: "bytes32",
+        name: "assetId",
+        type: "bytes32",
       },
       {
-        "internalType": "address",
-        "name": "adapter",
-        "type": "address"
+        internalType: "address",
+        name: "adapter",
+        type: "address",
       },
       {
-        "internalType": "address",
-        "name": "wrappedToken",
-        "type": "address"
+        internalType: "address",
+        name: "wrappedToken",
+        type: "address",
       },
       {
-        "internalType": "uint16",
-        "name": "depositFeeBps",
-        "type": "uint16"
+        internalType: "uint16",
+        name: "depositFeeBps",
+        type: "uint16",
       },
       {
-        "internalType": "uint16",
-        "name": "redeemFeeBps",
-        "type": "uint16"
-      }
+        internalType: "uint16",
+        name: "redeemFeeBps",
+        type: "uint16",
+      },
     ],
-    "name": "registerAsset",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    name: "registerAsset",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
   },
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "bytes32",
-        "name": "assetId",
-        "type": "bytes32"
+        internalType: "bytes32",
+        name: "assetId",
+        type: "bytes32",
       },
       {
-        "internalType": "bool",
-        "name": "active",
-        "type": "bool"
-      }
+        internalType: "bool",
+        name: "active",
+        type: "bool",
+      },
     ],
-    "name": "setAssetActive",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    name: "setAssetActive",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
   },
   {
-    "inputs": [
+    inputs: [
       {
-        "internalType": "bytes32",
-        "name": "assetId",
-        "type": "bytes32"
+        internalType: "bytes32",
+        name: "assetId",
+        type: "bytes32",
       },
       {
-        "internalType": "uint16",
-        "name": "depositFeeBps",
-        "type": "uint16"
+        internalType: "uint16",
+        name: "depositFeeBps",
+        type: "uint16",
       },
       {
-        "internalType": "uint16",
-        "name": "redeemFeeBps",
-        "type": "uint16"
-      }
+        internalType: "uint16",
+        name: "redeemFeeBps",
+        type: "uint16",
+      },
     ],
-    "name": "setAssetFees",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    name: "setAssetFees",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
   },
   {
-    "inputs": [],
-    "name": "treasury",
-    "outputs": [
+    inputs: [],
+    name: "treasury",
+    outputs: [
       {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
+        internalType: "address",
+        name: "",
+        type: "address",
+      },
     ],
-    "stateMutability": "view",
-    "type": "function"
+    stateMutability: "view",
+    type: "function",
   },
   {
-    "inputs": [],
-    "name": "unpause",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  }
+    inputs: [],
+    name: "unpause",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
 ] as const;

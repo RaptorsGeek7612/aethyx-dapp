@@ -36,9 +36,7 @@ export function CoverageMeter({ coverageBps, loading }: { coverageBps: bigint | 
           {label}
         </span>
       </div>
-      <p className="mt-1 text-2xl font-semibold tracking-tight">
-        {coverageBps === null ? "—" : `${pct.toFixed(2)}%`}
-      </p>
+      <p className="mt-1 text-2xl font-semibold tracking-tight">{coverageBps === null ? "—" : `${pct.toFixed(2)}%`}</p>
       <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full" style={{ backgroundColor: `${color}22` }}>
         <div
           className="h-full rounded-full transition-[width] duration-500"

@@ -23,7 +23,11 @@ export function useAssetData(asset: AssetDefinition) {
 
   const canReadUserData = staticData.registered && staticData.underlying !== ZERO_ADDRESS && Boolean(account);
 
-  const { data: userData, isLoading: loadingUserData, refetch: refetchUserData } = useReadContracts({
+  const {
+    data: userData,
+    isLoading: loadingUserData,
+    refetch: refetchUserData,
+  } = useReadContracts({
     allowFailure: true,
     contracts: [
       {

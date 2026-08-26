@@ -56,7 +56,8 @@ export function usePriceHistory(assetId: Hex, pricedByOracle: boolean | undefine
   const points = data ?? [];
   const latest = points.at(-1) ?? null;
   const dayAgoCutoff = latest ? latest.updatedAt - ONE_DAY_SECONDS : null;
-  const reference = latest && dayAgoCutoff !== null ? (points.find((p) => p.updatedAt >= dayAgoCutoff) ?? points[0]) : null;
+  const reference =
+    latest && dayAgoCutoff !== null ? (points.find((p) => p.updatedAt >= dayAgoCutoff) ?? points[0]) : null;
 
   const changeBps =
     latest && reference && reference.price > 0n ? ((latest.price - reference.price) * 10_000n) / reference.price : null;

@@ -12,7 +12,11 @@ export interface AssetValuation {
  * (see AuditBadge/ReserveCard for why): it's valued as the holder's pro-rata share of a static
  * appraisal, `(wrappedBalance / wrappedSupply) * appraisalValueEur`.
  */
-export function computeValuation(asset: AssetDefinition, data: AssetOnChainData, pricePerGram18: bigint): AssetValuation {
+export function computeValuation(
+  asset: AssetDefinition,
+  data: AssetOnChainData,
+  pricePerGram18: bigint,
+): AssetValuation {
   if (asset.kind === "real-estate") {
     const supply = Number(data.wrappedSupply) / 10 ** data.wrappedDecimals;
     const balance = Number(data.wrappedBalance) / 10 ** data.wrappedDecimals;

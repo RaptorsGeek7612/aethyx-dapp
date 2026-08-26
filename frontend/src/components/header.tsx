@@ -34,9 +34,7 @@ export function Header() {
                 href={link.href}
                 className={cn(
                   "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                  pathname === link.href
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-foreground",
+                  pathname === link.href ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 {link.label}

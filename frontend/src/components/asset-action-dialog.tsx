@@ -120,9 +120,7 @@ export function AssetActionDialog({ asset, trigger }: { asset: AssetDefinition; 
                   <button
                     type="button"
                     className="text-xs text-muted-foreground transition-colors hover:text-primary"
-                    onClick={() =>
-                      setDepositAmount(formatAmount(data.underlyingBalance, data.underlyingDecimals, 18))
-                    }
+                    onClick={() => setDepositAmount(formatAmount(data.underlyingBalance, data.underlyingDecimals, 18))}
                   >
                     Balance: {formatAmount(data.underlyingBalance, data.underlyingDecimals)}
                   </button>
@@ -153,11 +151,7 @@ export function AssetActionDialog({ asset, trigger }: { asset: AssetDefinition; 
                 </div>
               </div>
 
-              <Button
-                className="w-full"
-                disabled={!depositAmountBn || busy || !data.active}
-                onClick={handleDeposit}
-              >
+              <Button className="w-full" disabled={!depositAmountBn || busy || !data.active} onClick={handleDeposit}>
                 {busy ? stepLabel : `Deposit ${data.underlyingSymbol}`}
               </Button>
             </TabsContent>

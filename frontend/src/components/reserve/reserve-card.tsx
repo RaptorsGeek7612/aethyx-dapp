@@ -50,12 +50,7 @@ export function ReserveCard({ asset, index }: { asset: AssetDefinition; index: n
       ) : (
         <div className="mt-5 grid grid-cols-2 gap-3">
           {reserveValue && (
-            <StatTile
-              label="Reserve"
-              icon={<Package className="h-3 w-3" />}
-              value={reserveValue}
-              loading={isLoading}
-            />
+            <StatTile label="Reserve" icon={<Package className="h-3 w-3" />} value={reserveValue} loading={isLoading} />
           )}
           <StatTile
             label={`Locked ${asset.kind !== "real-estate" ? "ERC-3643" : "underlying"}`}

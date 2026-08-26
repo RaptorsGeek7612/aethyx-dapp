@@ -13,9 +13,8 @@ export default function ReservePage() {
           <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">Transparency</p>
           <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">Proof of Reserve</h1>
           <p className="mt-4 max-w-2xl text-sm text-muted-foreground">
-            Every wrapped token is backed 1:1 by collateral locked in its AssetAdapter. Coverage below is read
-            directly from the two on-chain numbers that make that true — it can&apos;t drift, lag, or be
-            misreported.
+            Every wrapped token is backed 1:1 by collateral locked in its AssetAdapter. Coverage below is read directly
+            from the two on-chain numbers that make that true — it can&apos;t drift, lag, or be misreported.
           </p>
 
           <div className="mt-5 flex max-w-2xl items-start gap-2.5 rounded-xl border border-white/5 bg-black/20 p-3.5 text-xs text-muted-foreground">
@@ -24,8 +23,8 @@ export default function ReservePage() {
               <strong className="text-foreground">Coverage</strong> is cryptographically verifiable on-chain: it
               compares the wrapped token&apos;s total supply against the underlying balance actually held by its
               adapter. <strong className="text-foreground">Audit</strong> is a separate, off-chain claim — that the
-              physical or legal asset behind the token is what its custodian says it is. The blockchain can prove
-              the first; only a trusted third party can attest to the second.
+              physical or legal asset behind the token is what its custodian says it is. The blockchain can prove the
+              first; only a trusted third party can attest to the second.
             </p>
           </div>
         </section>

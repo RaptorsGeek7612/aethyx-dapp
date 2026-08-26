@@ -86,7 +86,14 @@ export function PortfolioAssetRow({
         )}
       </div>
 
-      <AssetActionDialog asset={asset} trigger={<Button size="sm" variant="outline">Manage</Button>} />
+      <AssetActionDialog
+        asset={asset}
+        trigger={
+          <Button size="sm" variant="outline">
+            Manage
+          </Button>
+        }
+      />
     </div>
   );
 }

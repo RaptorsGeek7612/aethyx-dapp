@@ -35,7 +35,11 @@ export interface AssetStaticData {
  * dedupes identical calls, so using this in both places costs no extra RPC round trips.
  */
 export function useAssetStaticData(asset: AssetDefinition) {
-  const { data: config, isLoading: loadingConfig, refetch: refetchConfig } = useReadContract({
+  const {
+    data: config,
+    isLoading: loadingConfig,
+    refetch: refetchConfig,
+  } = useReadContract({
     address: VAULT_MANAGER_ADDRESS as Address,
     abi: vaultManagerAbi,
     functionName: "assets",
@@ -50,7 +54,11 @@ export function useAssetStaticData(asset: AssetDefinition) {
   const active = config?.[4] ?? false;
   const registered = adapter !== ZERO_ADDRESS;
 
-  const { data: details, isLoading: loadingDetails, refetch: refetchDetails } = useReadContracts({
+  const {
+    data: details,
+    isLoading: loadingDetails,
+    refetch: refetchDetails,
+  } = useReadContracts({
     allowFailure: true,
     contracts: [
       { address: adapter, abi: assetAdapterAbi, functionName: "underlying" },
@@ -63,7 +71,11 @@ export function useAssetStaticData(asset: AssetDefinition) {
   const underlyingDecimals = (details?.[1]?.result as number | undefined) ?? 18;
   const canReadTokenData = registered && underlying !== ZERO_ADDRESS;
 
-  const { data: tokenData, isLoading: loadingTokenData, refetch: refetchTokenData } = useReadContracts({
+  const {
+    data: tokenData,
+    isLoading: loadingTokenData,
+    refetch: refetchTokenData,
+  } = useReadContracts({
     allowFailure: true,
     contracts: [
       { address: underlying, abi: erc20Abi, functionName: "symbol" },
