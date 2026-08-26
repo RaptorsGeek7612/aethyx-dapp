@@ -64,7 +64,8 @@ redeemable 1:1 by the original holder.
 | `AssetAdapter` (+ `GoldAdapter`, `SilverAdapter`, `RealEstateAdapter`) | Custodies one ERC-3643 asset, runs compliance pre-checks, normalizes decimals to 18. |
 | `*AssetFactory` (Gold/Silver/RealEstate) | Deploys an adapter + wrapped ERC-20 pair together and registers them with `VaultManager`. Split into one factory per asset class — a single factory embedding every adapter's bytecode exceeded the EIP-170 contract size limit. |
 | `OracleManager` | Aggregates multiple price sources per asset into a manipulation-resistant median; excludes stale or divergent sources instead of trusting any single feed. |
-| `ManualPriceSource` | Simple pushed-price feed implementing `IPriceSource` (stand-in for Chainlink/Pyth). |
+| `ManualPriceSource` | Admin-pushable price feed implementing `IPriceSource` — a secondary source and a way to inject hostile test prices. |
+| `ChainlinkPriceSource` | `IPriceSource` wrapper around a real Chainlink `AggregatorV3Interface` feed — rejects negative/zero prices, incomplete or stale rounds, normalizes decimals to 18. |
 | `Treasury` | Collects protocol fee revenue. |
 
 ## Backend — Hardhat 3
@@ -126,6 +127,21 @@ Deploy with the [Vercel CLI](https://vercel.com/docs/cli):
 npm run build
 npx vercel deploy
 ```
+
+## CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and pull request:
+
+- **backend** — compile, typecheck, `hardhat test` (Solidity + TypeScript), `solhint`, `eslint`,
+  `prettier --check`.
+- **frontend** — `eslint`, `prettier --check`, typecheck, `next build` (with no `.env.local` —
+  the build must succeed unconfigured, see `frontend/src/config/contracts.ts`).
+
+A red build should block merge — enable branch protection on the GitHub repo (require the `CI`
+status checks to pass before merging) to enforce that; it isn't configured by this workflow file
+alone. Each package also exposes the same checks locally: see
+[`backend/README.md`](backend/README.md#lint--format) and
+[`frontend/README.md`](frontend/README.md#lint-format-typecheck).
 
 ## Security notes
 

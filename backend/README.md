@@ -1,57 +1,107 @@
-# Sample Hardhat 3 Project (`mocha` and `ethers`)
+# Invest'Or Gateway — backend
 
-This project showcases a Hardhat 3 project using `mocha` for tests and the `ethers` library for Ethereum interactions.
+Solidity contracts, tests, and Hardhat 3 Ignition deployment modules for the Invest'Or Gateway
+protocol. See the [root README](../README.md) for the full architecture and the protocol-level
+"why". This file covers day-to-day work in this directory.
 
-To learn more about Hardhat 3, please visit the [Getting Started guide](https://hardhat.org/docs/getting-started#getting-started-with-hardhat-3). To share your feedback, join our [Hardhat 3](https://hardhat.org/hardhat3-telegram-group) Telegram group or [open an issue](https://github.com/NomicFoundation/hardhat/issues/new) in our GitHub issue tracker.
+## Stack
 
-## Project Overview
+Hardhat 3 (`@nomicfoundation/hardhat-toolbox-mocha-ethers`), Solidity 0.8.35, OpenZeppelin
+Contracts 5.x, `forge-std` for Solidity-side tests, ethers v6 + Mocha/Chai for TypeScript tests.
 
-This example project includes:
-
-- A simple Hardhat configuration file.
-- Foundry-compatible Solidity unit tests.
-- TypeScript integration tests using `mocha` and ethers.js
-- Examples demonstrating how to connect to different types of networks, including locally simulating OP mainnet.
-
-## Usage
-
-### Running Tests
-
-To run all the tests in the project, execute the following command:
+## Setup
 
 ```shell
-npx hardhat test
+npm install
 ```
 
-You can also selectively run the Solidity or `mocha` tests:
+## Compile, test, typecheck
+
+```shell
+npx hardhat build          # compile
+npx hardhat test           # Solidity (.t.sol) + TypeScript (test/*.ts) tests
+npx tsc --noEmit           # typecheck test/scripts/ignition code against the compiled ABI
+```
+
+Run just one layer:
 
 ```shell
 npx hardhat test solidity
 npx hardhat test mocha
 ```
 
-### Make a deployment to Sepolia
-
-This project includes an example Ignition module to deploy the contract. You can deploy this module to a locally simulated chain or to Sepolia.
-
-To run the deployment to a local chain:
+## Lint & format
 
 ```shell
-npx hardhat ignition deploy ignition/modules/Counter.ts
+npm run lint        # solhint (contracts/) + eslint (test/, scripts/, ignition/)
+npm run lint:sol     # solhint only
+npm run lint:ts      # eslint only
+npm run format       # prettier --write, including prettier-plugin-solidity
+npm run format:check # CI-mode check, no writes
 ```
 
-To run the deployment to Sepolia, you need an account with funds to send the transaction. The provided Hardhat configuration includes a Configuration Variable called `SEPOLIA_PRIVATE_KEY`, which you can use to set the private key of the account you want to use.
+All four run in CI on every push/PR — see [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 
-You can set the `SEPOLIA_PRIVATE_KEY` variable using the `hardhat-keystore` plugin or by setting it as an environment variable.
+## Contracts (`contracts/`)
 
-To set the `SEPOLIA_PRIVATE_KEY` config variable using `hardhat-keystore`:
+| Contract | Role |
+|---|---|
+| `AccessManager` | Central `AccessControl` registry — every other contract checks roles here instead of managing its own. |
+| `InvestOrGateway` | Single user-facing entry point (`deposit`/`redeem`). Holds no funds; forwards `msg.sender` straight through to `VaultManager`. |
+| `VaultManager` | Orchestrator. Registers asset adapters, enforces fees, mints/burns wrapped tokens. Invariant: wrapped supply always equals value locked. Guarded by `Pausable` + `ReentrancyGuard`. |
+| `AssetAdapter` (+ `GoldAdapter`, `SilverAdapter`, `RealEstateAdapter`) | Custodies one ERC-3643 asset, runs compliance pre-checks, normalizes decimals to 18. |
+| `*AssetFactory` (Gold/Silver/RealEstate) | Deploys an adapter + wrapped ERC-20 pair together and registers them with `VaultManager`. One factory per asset class — a single factory embedding every adapter's bytecode exceeded the EIP-170 contract size limit. |
+| `OracleManager` | Aggregates multiple price sources per asset into a manipulation-resistant median; excludes stale or divergent sources instead of trusting any single feed. |
+| `ManualPriceSource` | Admin-pushable price feed implementing `IPriceSource`, used as both a secondary source and a way to inject hostile test prices. |
+| `ChainlinkPriceSource` | `IPriceSource` wrapper around a real Chainlink `AggregatorV3Interface` feed — rejects negative/zero prices, incomplete or stale rounds, and normalizes the feed's decimals to 18. |
+| `Treasury` | Collects protocol fee revenue; withdrawal gated behind `TREASURY_MANAGER_ROLE`. |
+
+Mocks used only in tests live in `contracts/mocks/`: `MockERC3643` (a minimal T-REX stand-in with
+a whitelist/compliance switch), `MockAggregatorV3` (reproduces Chainlink's aggregator, including
+negative/stale/incomplete/reverting rounds), and `ReentrantERC3643` (a malicious underlying whose
+transfer hooks try to re-enter `VaultManager`, for the reentrancy-guard tests).
+
+## Deploy locally
+
+```shell
+npx hardhat node                                                   # separate terminal
+npx hardhat ignition deploy ignition/modules/InvestOrGateway.ts --network localhost
+npx hardhat run scripts/seed-demo-assets.ts --network localhost    # seeds demo Gold/Silver/RealEstate
+```
+
+## Deploy to Sepolia
+
+Set the deployer key once, via the encrypted Hardhat keystore (preferred — never ends up in
+cleartext on disk) or as a plain environment variable:
 
 ```shell
 npx hardhat keystore set SEPOLIA_PRIVATE_KEY
 ```
 
-After setting the variable, you can run the deployment with the Sepolia network:
+`SEPOLIA_RPC_URL` works the same way — `npx hardhat keystore set SEPOLIA_RPC_URL` or an
+environment variable. Environment variables take precedence over the keystore if both are set.
 
 ```shell
-npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
+npx hardhat ignition deploy ignition/modules/InvestOrGateway.ts --network sepolia
+SEED_NETWORK=sepolia npx hardhat run scripts/seed-demo-assets.ts --network sepolia
 ```
+
+Deployed addresses land in `ignition/deployments/chain-<id>/deployed_addresses.json` — see the
+root README for the current Sepolia deployment's addresses.
+
+`ManualPriceSource` prices go stale after `maxStaleness` (1h by default) and `OracleManager`
+reverts rather than serve a stale price — push fresh prices again before any live demo:
+
+```typescript
+// via ethers, calling ManualPriceSource.setPrice(assetId, price) for each registered source
+```
+
+## Security notes
+
+- `AccessManager`'s `initialAdmin` should be a multisig or timelock in production, never a plain
+  EOA — it can grant and revoke every role, including itself.
+- `ROUTER_ROLE` (held only by `InvestOrGateway`, then permanently locked via `lockRouterRole`) is
+  fully trusted to only ever forward its own immediate `msg.sender` — never grant it to anything
+  that might pass through an arbitrary third-party address.
+- This is demo/testnet code (`MockERC3643`, `ManualPriceSource`) — not audited, not intended for
+  mainnet funds as-is.

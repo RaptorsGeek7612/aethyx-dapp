@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Invest'Or Gateway — frontend
 
-## Getting Started
+Next.js dApp for wrapping/redeeming Invest'Or Gateway's asset classes and viewing live
+reserve/oracle data. See the [root README](../README.md) for the protocol architecture this UI
+talks to.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Next.js 16 (App Router, Turbopack) + TypeScript, [wagmi v2](https://wagmi.sh) for on-chain
+reads/writes, [viem](https://viem.sh) as the underlying client, and
+[RainbowKit](https://rainbowkit.com) for wallet connection (MetaMask, WalletConnect-based mobile
+wallets, injected wallets). Styling via Tailwind CSS v4 and shadcn/ui components
+(`src/components/ui/`).
+
+> `AGENTS.md` in this directory flags that this Next.js major version has breaking changes vs.
+> older conventions — check `node_modules/next/dist/docs/` before assuming familiar APIs still
+> apply.
+
+## Setup
+
+```shell
+npm install
+cp .env.local.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Fill in `.env.local`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variable | Where it comes from |
+|---|---|
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Free at [cloud.walletconnect.com](https://cloud.walletconnect.com) — only needed for WalletConnect-based mobile wallets; MetaMask/injected wallets work without it. |
+| `NEXT_PUBLIC_GATEWAY_ADDRESS`, `NEXT_PUBLIC_VAULT_MANAGER_ADDRESS`, `NEXT_PUBLIC_ORACLE_MANAGER_ADDRESS` | From `backend/ignition/deployments/chain-<id>/deployed_addresses.json` after running Ignition (see backend README). |
+| `NEXT_PUBLIC_PRICE_SOURCE_ADDRESSES` | Comma-separated `priceSourcePrimary,priceSourceSecondary` from the same deployment — used to replay `PriceUpdated` event history for the price chart, since `OracleManager.getPrice` only returns the current aggregate. |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Left unset, the UI still renders — it flags itself as "not configured" (see
+`src/config/contracts.ts`) instead of crashing, and CI builds with no `.env.local` at all.
 
-## Learn More
+## Run
 
-To learn more about Next.js, take a look at the following resources:
+```shell
+npm run dev     # http://localhost:3000
+npm run build   # production build
+npm run start   # serve the production build
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Lint, format, typecheck
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```shell
+npm run lint          # eslint (eslint-config-next core-web-vitals + typescript)
+npm run format         # prettier --write
+npm run format:check   # CI-mode check, no writes
+npx tsc --noEmit       # typecheck
+```
 
-## Deploy on Vercel
+All of the above run in CI on every push/PR — see
+[`../.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Structure
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `src/app/page.tsx` — wrap/redeem dashboard: portfolio, per-asset action dialog.
+- `src/app/reserve/page.tsx` — reserve coverage and oracle price view per asset.
+- `src/config/` — wagmi config (`wagmi.ts`), contract addresses from env (`contracts.ts`), asset
+  metadata (`assets.ts`).
+- `src/hooks/` — wagmi-based reads (asset data/price/history) and the wrap/redeem write flow
+  (`use-wrap-actions.ts`).
+- `src/lib/abis/` — hand-picked ABI fragments per contract (not the full compiler output) so the
+  bundle only ships what the UI actually calls.
+
+## Deploy
+
+```shell
+npm run build
+npx vercel deploy
+```
+
+Set the same environment variables in the Vercel project settings as in `.env.local`.
