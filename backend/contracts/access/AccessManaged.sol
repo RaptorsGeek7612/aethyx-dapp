@@ -9,7 +9,6 @@ import { AccessManager } from "../AccessManager.sol";
 ///      in one place (AccessManager) so permissions can be granted, revoked or rotated across
 ///      the whole protocol without touching each contract individually.
 abstract contract AccessManaged {
-    
     AccessManager public immutable accessManager;
 
     error Unauthorized(address account, bytes32 role);

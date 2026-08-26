@@ -7,15 +7,13 @@ pragma solidity 0.8.35;
 ///      operations (mint, forcedTransfer, freeze, agent management) are intentionally
 ///      excluded: this codebase only ever acts as a holder of the token, never as its issuer.
 interface IERC3643 {
-    
     /// @notice True if `userAddress` holds a verified on-chain identity recognized by this
     ///         token's Identity Registry. A prerequisite to holding or receiving the token.
     /// @dev The AssetAdapter contract's own address must satisfy this check — arranged
     ///      out-of-band with the token issuer — before any deposit can ever succeed.
-    
-    
+
     function isVerified(address userAddress) external view returns (bool);
-    
+
     function decimals() external view returns (uint8);
 
     function balanceOf(address account) external view returns (uint256);

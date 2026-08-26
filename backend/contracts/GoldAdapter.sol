@@ -13,18 +13,16 @@ contract GoldAdapter is AssetAdapter {
 
     error BelowMinimumAmount(uint256 amount, uint256 minAmount);
 
-    constructor(address underlying_, address vaultManager_, bytes32 assetId_, uint256 minAmount_)
-        AssetAdapter(underlying_, vaultManager_, assetId_)
-    {
+    constructor(
+        address underlying_,
+        address vaultManager_,
+        bytes32 assetId_,
+        uint256 minAmount_
+    ) AssetAdapter(underlying_, vaultManager_, assetId_) {
         minAmount = minAmount_;
     }
 
-    function deposit(address from, uint256 amount)
-        public
-        override
-        onlyVaultManager
-        returns (uint256 normalizedAmount)
-    {
+    function deposit(address from, uint256 amount) public override onlyVaultManager returns (uint256 normalizedAmount) {
         if (amount < minAmount) revert BelowMinimumAmount(amount, minAmount);
         return super.deposit(from, amount);
     }

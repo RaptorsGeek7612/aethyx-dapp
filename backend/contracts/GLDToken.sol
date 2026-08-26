@@ -12,10 +12,11 @@ import { AccessManaged } from "./access/AccessManaged.sol";
 ///         through the standard ERC-20 allowance mechanism (ERC20Burnable), not a role: the
 ///         token holder's own approval is what authorizes VaultManager to burn on redemption.
 contract GLDToken is ERC20, ERC20Burnable, AccessManaged {
-    constructor(string memory name_, string memory symbol_, address accessManager_)
-        ERC20(name_, symbol_)
-        AccessManaged(accessManager_)
-    {}
+    constructor(
+        string memory name_,
+        string memory symbol_,
+        address accessManager_
+    ) ERC20(name_, symbol_) AccessManaged(accessManager_) {}
 
     /// @notice Mints `amount` wrapped tokens to `to`. Only ever called by VaultManager,
     ///         immediately after it has locked the matching ERC-3643 collateral.

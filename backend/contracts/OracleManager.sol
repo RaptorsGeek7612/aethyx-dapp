@@ -29,9 +29,12 @@ contract OracleManager is AccessManaged {
     error PriceDeviationTooHigh(bytes32 assetId, uint256 minPrice, uint256 maxPrice);
     error SourceNotRegistered(bytes32 assetId, address source);
 
-    constructor(address accessManager_, uint256 maxStaleness_, uint256 maxDeviationBps_, uint256 minSources_)
-        AccessManaged(accessManager_)
-    {
+    constructor(
+        address accessManager_,
+        uint256 maxStaleness_,
+        uint256 maxDeviationBps_,
+        uint256 minSources_
+    ) AccessManaged(accessManager_) {
         config = Config(maxStaleness_, maxDeviationBps_, minSources_);
     }
 
@@ -40,10 +43,7 @@ contract OracleManager is AccessManaged {
         emit PriceSourceAdded(assetId, source);
     }
 
-    function removePriceSource(bytes32 assetId, address source)
-        external
-        onlyRole(accessManager.ASSET_MANAGER_ROLE())
-    {
+    function removePriceSource(bytes32 assetId, address source) external onlyRole(accessManager.ASSET_MANAGER_ROLE()) {
         address[] storage list = _sources[assetId];
         uint256 len = list.length;
         for (uint256 i = 0; i < len; i++) {
@@ -57,10 +57,11 @@ contract OracleManager is AccessManaged {
         revert SourceNotRegistered(assetId, source);
     }
 
-    function setConfig(uint256 maxStaleness_, uint256 maxDeviationBps_, uint256 minSources_)
-        external
-        onlyRole(accessManager.ASSET_MANAGER_ROLE())
-    {
+    function setConfig(
+        uint256 maxStaleness_,
+        uint256 maxDeviationBps_,
+        uint256 minSources_
+    ) external onlyRole(accessManager.ASSET_MANAGER_ROLE()) {
         config = Config(maxStaleness_, maxDeviationBps_, minSources_);
         emit ConfigUpdated(maxStaleness_, maxDeviationBps_, minSources_);
     }

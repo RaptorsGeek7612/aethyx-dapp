@@ -24,7 +24,15 @@ async function deployRealEstateFixture() {
 
   await factory
     .connect(admin)
-    .deployRealEstateAsset(REAL_ESTATE_ASSET_ID, "Invest'Or Real Estate", "RLD", propertyToken.target, LOCKUP_PERIOD, 0n, 0n);
+    .deployRealEstateAsset(
+      REAL_ESTATE_ASSET_ID,
+      "Invest'Or Real Estate",
+      "RLD",
+      propertyToken.target,
+      LOCKUP_PERIOD,
+      0n,
+      0n,
+    );
 
   const assetConfig = await vaultManager.assets(REAL_ESTATE_ASSET_ID);
   const realEstateAdapter = await ethers.getContractAt("RealEstateAdapter", assetConfig.adapter);

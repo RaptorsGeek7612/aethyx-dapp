@@ -33,10 +33,18 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
     event AssetActiveSet(bytes32 indexed assetId, bool active);
     event AssetFeesSet(bytes32 indexed assetId, uint16 depositFeeBps, uint16 redeemFeeBps);
     event Deposited(
-        bytes32 indexed assetId, address indexed user, uint256 underlyingAmount, uint256 mintedAmount, uint256 feeAmount
+        bytes32 indexed assetId,
+        address indexed user,
+        uint256 underlyingAmount,
+        uint256 mintedAmount,
+        uint256 feeAmount
     );
     event Redeemed(
-        bytes32 indexed assetId, address indexed user, uint256 wrappedAmount, uint256 underlyingAmount, uint256 feeAmount
+        bytes32 indexed assetId,
+        address indexed user,
+        uint256 wrappedAmount,
+        uint256 underlyingAmount,
+        uint256 feeAmount
     );
 
     error AssetNotActive(bytes32 assetId);
@@ -74,10 +82,11 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         emit AssetActiveSet(assetId, active);
     }
 
-    function setAssetFees(bytes32 assetId, uint16 depositFeeBps, uint16 redeemFeeBps)
-        external
-        onlyRole(accessManager.ASSET_MANAGER_ROLE())
-    {
+    function setAssetFees(
+        bytes32 assetId,
+        uint16 depositFeeBps,
+        uint16 redeemFeeBps
+    ) external onlyRole(accessManager.ASSET_MANAGER_ROLE()) {
         _validateFees(depositFeeBps, redeemFeeBps);
         AssetConfig storage config = assets[assetId];
         config.depositFeeBps = depositFeeBps;
@@ -96,7 +105,10 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
     /// @notice Deposits `amount` (underlying decimals) of the ERC-3643 asset identified by
     ///         `assetId`, minting the equivalent wrapped ERC-20 (minus the deposit fee) to
     ///         the caller.
-    function deposit(bytes32 assetId, uint256 amount) external whenNotPaused nonReentrant returns (uint256 mintedAmount) {
+    function deposit(
+        bytes32 assetId,
+        uint256 amount
+    ) external whenNotPaused nonReentrant returns (uint256 mintedAmount) {
         return _deposit(assetId, amount, msg.sender);
     }
 
@@ -108,37 +120,31 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
     ///      only ever pass through its own immediate msg.sender here, never an arbitrary
     ///      third-party address — the same trust level already placed in MINTER_ROLE/
     ///      FACTORY_ROLE holders.
-    function depositFor(bytes32 assetId, uint256 amount, address depositor)
-        external
-        whenNotPaused
-        nonReentrant
-        onlyRole(accessManager.ROUTER_ROLE())
-        returns (uint256 mintedAmount)
-    {
+    function depositFor(
+        bytes32 assetId,
+        uint256 amount,
+        address depositor
+    ) external whenNotPaused nonReentrant onlyRole(accessManager.ROUTER_ROLE()) returns (uint256 mintedAmount) {
         return _deposit(assetId, amount, depositor);
     }
 
     /// @notice Burns `wrappedAmount` of the wrapped ERC-20 for `assetId` from the caller and
     ///         releases the equivalent underlying ERC-3643 (minus the redeem fee) to them.
     ///         Requires the caller to have approved this contract for at least `wrappedAmount`.
-    function redeem(bytes32 assetId, uint256 wrappedAmount)
-        external
-        whenNotPaused
-        nonReentrant
-        returns (uint256 underlyingAmount)
-    {
+    function redeem(
+        bytes32 assetId,
+        uint256 wrappedAmount
+    ) external whenNotPaused nonReentrant returns (uint256 underlyingAmount) {
         return _redeem(assetId, wrappedAmount, msg.sender);
     }
 
     /// @notice Same as redeem, but burns from and releases to `redeemer` instead of
     ///         msg.sender. Restricted to ROUTER_ROLE — see depositFor's natspec.
-    function redeemFor(bytes32 assetId, uint256 wrappedAmount, address redeemer)
-        external
-        whenNotPaused
-        nonReentrant
-        onlyRole(accessManager.ROUTER_ROLE())
-        returns (uint256 underlyingAmount)
-    {
+    function redeemFor(
+        bytes32 assetId,
+        uint256 wrappedAmount,
+        address redeemer
+    ) external whenNotPaused nonReentrant onlyRole(accessManager.ROUTER_ROLE()) returns (uint256 underlyingAmount) {
         return _redeem(assetId, wrappedAmount, redeemer);
     }
 
@@ -156,7 +162,11 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         emit Deposited(assetId, depositor, amount, mintedAmount, feeAmount);
     }
 
-    function _redeem(bytes32 assetId, uint256 wrappedAmount, address redeemer) private returns (uint256 underlyingAmount) {
+    function _redeem(
+        bytes32 assetId,
+        uint256 wrappedAmount,
+        address redeemer
+    ) private returns (uint256 underlyingAmount) {
         AssetConfig storage config = assets[assetId];
         if (!config.active) revert AssetNotActive(assetId);
 

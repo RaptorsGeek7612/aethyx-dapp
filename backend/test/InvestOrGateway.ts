@@ -42,7 +42,19 @@ async function deployProtocolFixture() {
   await goldToken.mint(alice.address, ethers.parseUnits("1000", 18));
   await goldToken.mint(bob.address, ethers.parseUnits("1000", 18));
 
-  return { admin, alice, bob, accessManager, treasury, vaultManager, factory, gateway, goldToken, goldAdapter, gldToken };
+  return {
+    admin,
+    alice,
+    bob,
+    accessManager,
+    treasury,
+    vaultManager,
+    factory,
+    gateway,
+    goldToken,
+    goldAdapter,
+    gldToken,
+  };
 }
 
 describe("Invest'Or Gateway — gold wrap end to end", function () {
@@ -138,7 +150,8 @@ describe("Invest'Or Gateway — gold wrap end to end", function () {
   });
 
   it("blocks deposits once VaultManager is paused", async function () {
-    const { admin, alice, vaultManager, goldToken, goldAdapter } = await networkHelpers.loadFixture(deployProtocolFixture);
+    const { admin, alice, vaultManager, goldToken, goldAdapter } =
+      await networkHelpers.loadFixture(deployProtocolFixture);
 
     await vaultManager.connect(admin).pause();
 

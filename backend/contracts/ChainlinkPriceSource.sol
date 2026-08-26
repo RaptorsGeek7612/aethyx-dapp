@@ -78,7 +78,7 @@ contract ChainlinkPriceSource is IPriceSource {
      * @return updatedAt Horodatage de la dernière publication, utilisé par le filtre de péremption.
      */
     function latestPrice(bytes32) external view returns (uint256 price, uint256 updatedAt) {
-        (uint80 roundId, int256 answer,, uint256 updatedAt_, uint80 answeredInRound) = aggregator.latestRoundData();
+        (uint80 roundId, int256 answer, , uint256 updatedAt_, uint80 answeredInRound) = aggregator.latestRoundData();
 
         // 1. Un prix nul ou négatif n'a aucun sens pour un actif : la donnée est corrompue.
         if (answer <= 0) revert NonPositiveAnswer(answer);

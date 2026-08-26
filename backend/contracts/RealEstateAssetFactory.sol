@@ -32,8 +32,12 @@ contract RealEstateAssetFactory is AccessManaged {
         uint16 redeemFeeBps
     ) external onlyRole(accessManager.ASSET_MANAGER_ROLE()) returns (address adapter, address wrappedToken) {
         GLDToken token = new GLDToken(name, symbol, address(accessManager));
-        RealEstateAdapter realEstateAdapter =
-            new RealEstateAdapter(underlying, address(vaultManager), assetId, lockupPeriod);
+        RealEstateAdapter realEstateAdapter = new RealEstateAdapter(
+            underlying,
+            address(vaultManager),
+            assetId,
+            lockupPeriod
+        );
 
         vaultManager.registerAsset(assetId, address(realEstateAdapter), address(token), depositFeeBps, redeemFeeBps);
 

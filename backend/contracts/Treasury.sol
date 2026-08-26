@@ -22,20 +22,18 @@ contract Treasury is AccessManaged {
     receive() external payable {}
 
     /// @notice Sends `amount` of `token` held by the treasury to `to`.
-    function withdraw(address token, address to, uint256 amount)
-        external
-        onlyRole(accessManager.TREASURY_MANAGER_ROLE())
-    {
+    function withdraw(
+        address token,
+        address to,
+        uint256 amount
+    ) external onlyRole(accessManager.TREASURY_MANAGER_ROLE()) {
         IERC20(token).safeTransfer(to, amount);
         emit Withdrawn(token, to, amount);
     }
 
     /// @notice Sends `amount` of ETH held by the treasury to `to`.
-    function withdrawEth(address payable to, uint256 amount)
-        external
-        onlyRole(accessManager.TREASURY_MANAGER_ROLE())
-    {
-        (bool success,) = to.call{value: amount}("");
+    function withdrawEth(address payable to, uint256 amount) external onlyRole(accessManager.TREASURY_MANAGER_ROLE()) {
+        (bool success, ) = to.call{ value: amount }("");
         if (!success) revert EthTransferFailed(to, amount);
         emit EthWithdrawn(to, amount);
     }

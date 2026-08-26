@@ -97,9 +97,10 @@ describe("ChainlinkPriceSource — fiabilité de l'oracle extérieur", () => {
       const aggregator = await ethers.deployContract("MockAggregatorV3", [20n, 1n]);
       const factory = await ethers.getContractFactory("ChainlinkPriceSource");
 
-      await expect(
-        factory.deploy(await aggregator.getAddress(), "trop de décimales"),
-      ).to.be.revertedWithCustomError(factory, "UnsupportedDecimals");
+      await expect(factory.deploy(await aggregator.getAddress(), "trop de décimales")).to.be.revertedWithCustomError(
+        factory,
+        "UnsupportedDecimals",
+      );
     });
   });
 

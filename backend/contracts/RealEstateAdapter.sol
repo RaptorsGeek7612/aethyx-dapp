@@ -18,18 +18,16 @@ contract RealEstateAdapter is AssetAdapter {
 
     error StillLocked(address account, uint256 lockedUntil);
 
-    constructor(address underlying_, address vaultManager_, bytes32 assetId_, uint256 lockupPeriod_)
-        AssetAdapter(underlying_, vaultManager_, assetId_)
-    {
+    constructor(
+        address underlying_,
+        address vaultManager_,
+        bytes32 assetId_,
+        uint256 lockupPeriod_
+    ) AssetAdapter(underlying_, vaultManager_, assetId_) {
         lockupPeriod = lockupPeriod_;
     }
 
-    function deposit(address from, uint256 amount)
-        public
-        override
-        onlyVaultManager
-        returns (uint256 normalizedAmount)
-    {
+    function deposit(address from, uint256 amount) public override onlyVaultManager returns (uint256 normalizedAmount) {
         lockedUntil[from] = block.timestamp + lockupPeriod;
         return super.deposit(from, amount);
     }

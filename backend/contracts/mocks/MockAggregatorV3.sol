@@ -44,11 +44,7 @@ contract MockAggregatorV3 {
         return 4;
     }
 
-    function latestRoundData()
-        external
-        view
-        returns (uint80, int256, uint256, uint256, uint80)
-    {
+    function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80) {
         if (shouldRevert) revert FeedDown();
         return (_roundId, _answer, _startedAt, _updatedAt, _answeredInRound);
     }
@@ -86,12 +82,7 @@ contract MockAggregatorV3 {
         shouldRevert = value;
     }
 
-    function _set(
-        uint80 roundId_,
-        int256 answer_,
-        uint256 updatedAt_,
-        uint80 answeredInRound_
-    ) private {
+    function _set(uint80 roundId_, int256 answer_, uint256 updatedAt_, uint80 answeredInRound_) private {
         _roundId = roundId_;
         _answer = answer_;
         _startedAt = updatedAt_;
