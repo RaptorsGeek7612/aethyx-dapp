@@ -1,12 +1,12 @@
 {
-  "InvestOrGateway#AccessManager": "0xc10B6c37Ff4041a4F1a583Ef15E9f6d2bE290237",
-  "InvestOrGateway#OracleManager": "0x5a63a28Bb0a2CFe8c47D2a2532E5713818d4b95A",
-  "InvestOrGateway#Treasury": "0x328A3dA508917d070FB4052d2ED62794CcA68312",
-  "InvestOrGateway#priceSourcePrimary": "0x1803aE26F258e45c2d461F95A768ec1E9DC2c36D",
-  "InvestOrGateway#priceSourceSecondary": "0x3B8f9135E7FC8dcF67B2DF8D73c23C9f68931215",
-  "InvestOrGateway#VaultManager": "0x9B963bf48d23434B6499593cB421f7a147041Fc2",
-  "InvestOrGateway#GoldAssetFactory": "0x50Ab15B0E2781b48Bd9035cB543Da0C4d1877ab5",
-  "InvestOrGateway#InvestOrGateway": "0x10C5FfF00b81977f4eEbe24A392d59FCb35B4287",
-  "InvestOrGateway#RealEstateAssetFactory": "0xccf12a4a35d500C399223a1aB47e3e8D00c72793",
-  "InvestOrGateway#SilverAssetFactory": "0x04d23917f214fc2Cd80BB5e71f8327102681E91e"
+  "InvestOrGateway#AccessManager": "0x177528950CD48409c5bC74a8B9A1e280c7e8072f",
+  "InvestOrGateway#OracleManager": "0x3B5d8fbF69e4672D618639437d13A09204104DF5",
+  "InvestOrGateway#Treasury": "0xCF8D2F6ecc058555C28DCa1838F76FEf71cf9Bd9",
+  "InvestOrGateway#priceSourcePrimary": "0x7656d3AdC0c464a8945417697Ceb78640B8a8933",
+  "InvestOrGateway#priceSourceSecondary": "0x21D2e5dc6D2400c460039F8597c148429d12cd2f",
+  "InvestOrGateway#VaultManager": "0x63C5bACc8C4c8d6b18e1c909fAF4b8C5F6646b53",
+  "InvestOrGateway#GoldAssetFactory": "0x6BDd2C9eEb6031b8d2aBc49b5d080cc13CA87941",
+  "InvestOrGateway#InvestOrGateway": "0xb2aE412cE8c8af237Df28cF1fE06599D33F08d59",
+  "InvestOrGateway#RealEstateAssetFactory": "0x0d759a29967EfC713Bd44682e5A1193848d692cE",
+  "InvestOrGateway#SilverAssetFactory": "0x0AFE40BC4Ae1603Ba86Af972eec1D422E9ce42f0"
 }

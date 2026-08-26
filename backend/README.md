@@ -92,6 +92,26 @@ root README for the current Sepolia deployment's addresses.
 `ManualPriceSource` prices go stale after `maxStaleness` (1h by default) and `OracleManager`
 reverts rather than serve a stale price — push fresh prices again before any live demo:
 
+### ChainlinkPriceSource on Sepolia — a unit mismatch, not a bug
+
+The real Sepolia XAU/USD feed (`0xC5981F461d74c46eB4b0CF3f4Ec79f025573B0Ea`, confirmed live on-chain)
+reports USD per troy ounce. Everything else in this protocol — the `GOLD` asset's
+`ManualPriceSource` entries, and the frontend's whole valuation model
+(`appraisalValueEur`, `priceEurPerGram`) — is built around EUR per gram. Those are two different
+units in two different currencies, off by roughly three orders of magnitude; registering the raw
+feed under `GOLD` would make `OracleManager`'s deviation filter reject it outright (or, worse, if
+it ever did pass, mislabel a USD/oz number as EUR/gram everywhere in the UI).
+
+`ChainlinkPriceSource` is deployed and registered, but under its own asset id (`GOLD_USD_OZ`),
+kept deliberately separate from the `GOLD` id the frontend reads. Query it directly —
+`ChainlinkPriceSource.latestPrice(anyBytes32)` ignores the argument — to see the real feed working;
+`OracleManager.getPrice(GOLD_USD_OZ)` will revert on `InsufficientFreshSources` since it's the only
+source registered there and `minSources` is 2 by default. That revert is correct: it means no
+second, unit-matched source has been added for that id, not that something is broken. Properly
+wiring Chainlink into `GOLD` itself means converting units (a small on-chain conversion, or an
+off-chain-priced `ManualPriceSource` kept in sync with the ounce feed) and is tracked as future
+work, not done here.
+
 ```typescript
 // via ethers, calling ManualPriceSource.setPrice(assetId, price) for each registered source
 ```

@@ -1,0 +1,12 @@
+{
+  "chainlinkPriceSourceXauUsd": "0x8e6ded34eeE24F6270F696eeDFfbD479Dd0bdb4A",
+  "goldUnderlying": "0x7B1940666d11BfB4169C41243baEF25769a4DB5A",
+  "silverUnderlying": "0x4B99C0D643661829947909A7818b43a9EC6CF277",
+  "propertyUnderlying": "0x49CEfD290FcdCDb951E68C68cbae7400551aebf9",
+  "goldAdapter": "0x7e2e638d2E9EF55cA3e213e8c899B4532EA6e34a",
+  "goldToken": "0x494f5Bd3c6c1EFc46C0FD6ba39ce448633257369",
+  "silverAdapter": "0x3334B1c75510E5cDc4EDf7B3478Bd812e952c34B",
+  "silverToken": "0x4EA103f6093D5152ef00061BE6Aa837c282F876d",
+  "realEstateAdapter": "0x814Cd901527cEd801C73A8db09202c5593dB4fbF",
+  "realEstateToken": "0xE170c49dEbde4eE59f990731e688dc847941a0F1"
+}

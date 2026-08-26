@@ -99,18 +99,29 @@ npx hardhat ignition deploy ignition/modules/InvestOrGateway.ts --network sepoli
 SEED_NETWORK=sepolia npx hardhat run scripts/seed-demo-assets.ts --network sepolia
 ```
 
-Current Sepolia deployment (`backend/ignition/deployments/chain-11155111/`):
+Current Sepolia deployment (`backend/ignition/deployments/chain-11155111/`), redeployed to include
+the `ROUTER_ROLE` lock and `OracleManager` hardening — verified `exact_match` on
+[Sourcify](https://sourcify.dev):
 
 | Contract | Address |
 |---|---|
-| `InvestOrGateway` | `0x10C5FfF00b81977f4eEbe24A392d59FCb35B4287` |
-| `VaultManager` | `0x9B963bf48d23434B6499593cB421f7a147041Fc2` |
-| `OracleManager` | `0x5a63a28Bb0a2CFe8c47D2a2532E5713818d4b95A` |
-| `AccessManager` | `0xc10B6c37Ff4041a4F1a583Ef15E9f6d2bE290237` |
-| `Treasury` | `0x328A3dA508917d070FB4052d2ED62794CcA68312` |
-| `GoldAssetFactory` | `0x50Ab15B0E2781b48Bd9035cB543Da0C4d1877ab5` |
-| `SilverAssetFactory` | `0x04d23917f214fc2Cd80BB5e71f8327102681E91e` |
-| `RealEstateAssetFactory` | `0xccf12a4a35d500C399223a1aB47e3e8D00c72793` |
+| `InvestOrGateway` | `0xb2aE412cE8c8af237Df28cF1fE06599D33F08d59` |
+| `VaultManager` | `0x63C5bACc8C4c8d6b18e1c909fAF4b8C5F6646b53` |
+| `OracleManager` | `0x3B5d8fbF69e4672D618639437d13A09204104DF5` |
+| `AccessManager` | `0x177528950CD48409c5bC74a8B9A1e280c7e8072f` |
+| `Treasury` | `0xCF8D2F6ecc058555C28DCa1838F76FEf71cf9Bd9` |
+| `GoldAssetFactory` | `0x6BDd2C9eEb6031b8d2aBc49b5d080cc13CA87941` |
+| `SilverAssetFactory` | `0x0AFE40BC4Ae1603Ba86Af972eec1D422E9ce42f0` |
+| `RealEstateAssetFactory` | `0x0d759a29967EfC713Bd44682e5A1193848d692cE` |
+| `priceSourcePrimary` (ManualPriceSource) | `0x7656d3AdC0c464a8945417697Ceb78640B8a8933` |
+| `priceSourceSecondary` (ManualPriceSource) | `0x21D2e5dc6D2400c460039F8597c148429d12cd2f` |
+| `ChainlinkPriceSource` (real Sepolia XAU/USD feed) | `0x8e6ded34eeE24F6270F696eeDFfbD479Dd0bdb4A` |
+
+`ChainlinkPriceSource` is registered in `OracleManager` under its own `GOLD_USD_OZ` asset id, not
+under `GOLD` — the live feed reports USD per troy ounce, while `GOLD`'s `ManualPriceSource` entries
+(and the whole frontend) are built around EUR per gram. Wiring them into the same asset id without
+a unit conversion would either revert on deviation or silently mislabel the price. See the backend
+README's Sepolia section for the reasoning.
 
 ## Frontend — Next.js
 
