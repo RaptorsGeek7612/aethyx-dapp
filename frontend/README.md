@@ -67,9 +67,15 @@ All of the above run in CI on every push/PR — see
 
 ## Deploy
 
+Live at **[investor-gateway.vercel.app](https://investor-gateway.vercel.app)**. Redeploy
+with:
+
 ```shell
 npm run build
 npx vercel deploy
 ```
 
-Set the same environment variables in the Vercel project settings as in `.env.local`.
+Environment variables live in the Vercel project settings, not in a committed file — set or update
+them with `npx vercel env add <NAME> production` (prompts for the value), or through the dashboard.
+A build only picks up a newly added variable on the *next* deploy; force one with
+`npx vercel --prod --force` if you just changed one.

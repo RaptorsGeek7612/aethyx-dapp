@@ -90,7 +90,16 @@ Deployed addresses land in `ignition/deployments/chain-<id>/deployed_addresses.j
 root README for the current Sepolia deployment's addresses.
 
 `ManualPriceSource` prices go stale after `maxStaleness` (1h by default) and `OracleManager`
-reverts rather than serve a stale price — push fresh prices again before any live demo:
+reverts rather than serve a stale price — push fresh prices again before any live demo, once per
+registered source per asset:
+
+```typescript
+import { network } from "hardhat";
+const { ethers } = await network.create();
+const [signer] = await ethers.getSigners(); // must hold ORACLE_UPDATER_ROLE
+const source = await ethers.getContractAt("ManualPriceSource", "<priceSourcePrimary address>", signer);
+await source.setPrice(ethers.id("GOLD"), ethers.parseUnits("92", 18));
+```
 
 ### ChainlinkPriceSource on Sepolia — a unit mismatch, not a bug
 
@@ -111,10 +120,6 @@ second, unit-matched source has been added for that id, not that something is br
 wiring Chainlink into `GOLD` itself means converting units (a small on-chain conversion, or an
 off-chain-priced `ManualPriceSource` kept in sync with the ounce feed) and is tracked as future
 work, not done here.
-
-```typescript
-// via ethers, calling ManualPriceSource.setPrice(assetId, price) for each registered source
-```
 
 ## Security notes
 

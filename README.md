@@ -132,7 +132,8 @@ cp .env.local.example .env.local   # fill in the addresses above + a WalletConne
 npm run dev                        # http://localhost:3000
 ```
 
-Deploy with the [Vercel CLI](https://vercel.com/docs/cli):
+Live at **[investor-gateway.vercel.app](https://investor-gateway.vercel.app)**, pointed at
+the Sepolia deployment above. Deploy your own with the [Vercel CLI](https://vercel.com/docs/cli):
 
 ```shell
 npm run build
@@ -148,9 +149,9 @@ npx vercel deploy
 - **frontend** — `eslint`, `prettier --check`, typecheck, `next build` (with no `.env.local` —
   the build must succeed unconfigured, see `frontend/src/config/contracts.ts`).
 
-A red build should block merge — enable branch protection on the GitHub repo (require the `CI`
-status checks to pass before merging) to enforce that; it isn't configured by this workflow file
-alone. Each package also exposes the same checks locally: see
+Branch protection is enabled on `master`: both jobs above are required status checks, so a red
+build blocks merging a PR (repo admins can still push directly — that's a GitHub default, not a
+gap in this config). Each package also exposes the same checks locally: see
 [`backend/README.md`](backend/README.md#lint--format) and
 [`frontend/README.md`](frontend/README.md#lint-format-typecheck).
 
