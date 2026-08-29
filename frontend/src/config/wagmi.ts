@@ -27,13 +27,25 @@ const connectors = connectorsForWallets(
   { appName: "Invest'Or Gateway", projectId },
 );
 
-// Falls back to wagmi/viem's bundled public Sepolia endpoint (thirdweb's) when unset, which
-// tolerates a 1000-block eth_getLogs range — comfortably enough for lib/log-range.ts's chunked
-// queries. Set NEXT_PUBLIC_SEPOLIA_RPC_URL only to a provider that's *at least* as generous:
-// several "free tier" API keys (Alchemy's included) cap eth_getLogs at a 10-block range, which
-// is unusable for this app's price/transaction history and would silently break both — verify
-// the actual getLogs range limit before pointing this at anything.
-const sepoliaRpcUrl = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || undefined;
+// Not wagmi/viem's own bundled default (thirdweb's public endpoint) — that one advertises a
+// generous eth_getLogs range and permissive CORS to a single curl request, but drops the CORS
+// header under this app's actual load (7 assets × several reads each, refetched on intervals,
+// plus lib/log-range.ts's chunked getLogs calls all firing close together) — confirmed with a
+// real headless-browser run against the deployed site: dozens of
+// "blocked by CORS policy: No 'Access-Control-Allow-Origin' header" errors that a single
+// isolated request never reproduces. publicnode's endpoint tolerates both a several-hundred-block
+// getLogs range and this app's real concurrent request volume — verified the same way. Override
+// with NEXT_PUBLIC_SEPOLIA_RPC_URL only after checking a candidate against actual page load, not
+// just a lone request — that's exactly what went wrong here once already.
+const sepoliaRpcUrl = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com";
+
+// Without this, every useReadContract/getLogs call is its own HTTP POST — a first paint with 7
+// assets × several reads each, plus lib/log-range.ts's chunked getLogs calls, fires 70+ requests
+// within the same tick and gets rate-limited (429) by a public endpoint, confirmed with a real
+// headless-browser run. `batch: true` makes viem collect everything queued within `wait`
+// milliseconds into a single JSON-RPC batch POST instead — same data, a fraction of the HTTP
+// requests a rate limiter actually counts.
+const sepoliaTransport = http(sepoliaRpcUrl, { batch: { wait: 40 } });
 
 // The local Hardhat node only ever exists on a developer's own machine — including it
 // unconditionally meant the deployed site tried to reach http://127.0.0.1:8545 for anything that
@@ -49,7 +61,7 @@ export const wagmiConfig = includeLocalChain
       chains: [hardhat, sepolia],
       transports: {
         [hardhat.id]: http(),
-        [sepolia.id]: http(sepoliaRpcUrl),
+        [sepolia.id]: sepoliaTransport,
       },
       ssr: true,
     })
@@ -57,7 +69,7 @@ export const wagmiConfig = includeLocalChain
       connectors,
       chains: [sepolia],
       transports: {
-        [sepolia.id]: http(sepoliaRpcUrl),
+        [sepolia.id]: sepoliaTransport,
       },
       ssr: true,
     });
