@@ -2,6 +2,7 @@ import { Info } from "lucide-react";
 import { Header } from "@/components/header";
 import { ConfigBanner } from "@/components/config-banner";
 import { ReserveGrid } from "@/components/reserve-grid";
+import { ReserveTotal } from "@/components/reserve/reserve-total";
 
 export default function ReservePage() {
   return (
@@ -31,6 +32,7 @@ export default function ReservePage() {
 
         <ConfigBanner />
 
+        <ReserveTotal />
         <ReserveGrid />
       </main>
 

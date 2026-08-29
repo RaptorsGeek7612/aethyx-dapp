@@ -7,15 +7,7 @@ import { ASSETS } from "@/config/assets";
 import { PortfolioAssetRow, type AssetMetrics } from "@/components/dashboard/portfolio-asset-row";
 import { CoverageMeter } from "@/components/reserve/coverage-meter";
 import { OracleStatusTile } from "@/components/dashboard/oracle-status-tile";
-import type { OracleHealth } from "@/hooks/use-asset-price";
-
-function aggregateOracleHealth(healths: OracleHealth[]): OracleHealth {
-  const priced = healths.filter((h) => h !== "not-priced");
-  if (priced.length === 0) return "not-priced";
-  if (priced.some((h) => h === "unavailable")) return "unavailable";
-  if (priced.some((h) => h === "loading")) return "loading";
-  return "healthy";
-}
+import { aggregateOracleHealth } from "@/hooks/use-asset-price";
 
 export function PortfolioSummary() {
   const { isConnected } = useAccount();

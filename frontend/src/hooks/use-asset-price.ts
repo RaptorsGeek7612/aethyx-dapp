@@ -34,3 +34,12 @@ export function useAssetPrice(assetId: Hex, pricedByOracle: boolean | undefined)
 
   return { price, worstUpdatedAt, isLoading, health, refetch };
 }
+
+/** Worst-case health across several assets: any unavailable feed taints the whole aggregate. */
+export function aggregateOracleHealth(healths: OracleHealth[]): OracleHealth {
+  const priced = healths.filter((h) => h !== "not-priced");
+  if (priced.length === 0) return "not-priced";
+  if (priced.some((h) => h === "unavailable")) return "unavailable";
+  if (priced.some((h) => h === "loading")) return "loading";
+  return "healthy";
+}
