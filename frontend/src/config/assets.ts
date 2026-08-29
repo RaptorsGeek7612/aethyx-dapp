@@ -46,6 +46,17 @@ export interface AssetDefinition {
   appraisalValueEur?: number;
 }
 
+// The five lock-up choices for the Paris real-estate asset, each deployed as its own
+// RealEstateAdapter + wrapped-token market (see RealEstateAssetFactory) rather than a per-deposit
+// parameter — RealEstateAdapter.lockupPeriod is set once, immutably, at deployment.
+export const REAL_ESTATE_LOCKUP_TIERS = [
+  { key: "15D", label: "15 days" },
+  { key: "1M", label: "1 month" },
+  { key: "3M", label: "3 months" },
+  { key: "6M", label: "6 months" },
+  { key: "1Y", label: "1 year" },
+] as const;
+
 // VaultManager has no on-chain enumeration of registered assets (a deliberate simplicity
 // trade-off — see AssetAdapter.sol's lesson on the mapping-based registry). Until an indexer
 // or an AssetRegistered-event-based discovery feed exists, the frontend keeps its own list of
@@ -82,17 +93,22 @@ export const ASSETS: AssetDefinition[] = [
       asOf: "2026-07-01",
     },
   },
-  {
-    id: assetIdFromLabel("REAL_ESTATE_PARIS_01"),
-    label: "REAL_ESTATE_PARIS_01",
+  ...REAL_ESTATE_LOCKUP_TIERS.map((tier): AssetDefinition => ({
+    id: assetIdFromLabel(`REAL_ESTATE_PARIS_01_${tier.key}`),
+    label: `REAL_ESTATE_PARIS_01_${tier.key}`,
     kind: "real-estate",
-    title: "Paris Property #01",
-    description: "Fractionalized real estate, subject to a minimum holding period on redemption.",
-    appraisalValueEur: 235_000,
+    title: `Paris Property #01 — ${tier.label}`,
+    description: `Fractionalized real estate, locked for ${tier.label} after deposit before redemption is allowed.`,
+    // Same building tokenized across five independent lock-up markets rather than one asset
+    // with a per-deposit choice (see AssetAdapter/VaultManager's fixed deposit(from, amount)
+    // signature) — each market gets its own underlying token and its own slice of the
+    // appraisal, so summing across all five still totals the building's real value instead of
+    // multiplying it by five.
+    appraisalValueEur: 235_000 / REAL_ESTATE_LOCKUP_TIERS.length,
     attestation: {
       verified: true,
       auditor: "Notaire de Paris — Étude XYZ",
       asOf: "2026-06-15",
     },
-  },
+  })),
 ];
