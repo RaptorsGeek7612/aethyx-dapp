@@ -8,20 +8,11 @@ import { Button } from "@/components/ui/button";
 import { AssetActionDialog } from "@/components/asset-action-dialog";
 import type { AssetDefinition } from "@/config/assets";
 import { useAssetData } from "@/hooks/use-asset-data";
-import { useAssetPrice, type OracleHealth } from "@/hooks/use-asset-price";
-import { usePriceHistory } from "@/hooks/use-price-history";
-import { computeValuation } from "@/lib/valuation";
+import { useAssetMetrics, type AssetMetrics } from "@/hooks/use-asset-metrics";
 import { formatAmount } from "@/lib/format";
-import { toCanonical18 } from "@/lib/decimals";
 import { KIND_META } from "@/lib/asset-kind-meta";
 
-export interface AssetMetrics {
-  valueEur: number;
-  changeBps: bigint | null;
-  lockedNormalized: bigint;
-  wrappedSupply: bigint;
-  oracleHealth: OracleHealth;
-}
+export type { AssetMetrics };
 
 export function PortfolioAssetRow({
   asset,
@@ -32,25 +23,25 @@ export function PortfolioAssetRow({
 }) {
   const { isConnected } = useAccount();
   const { data } = useAssetData(asset);
-  const { price, health } = useAssetPrice(asset.id, asset.pricedByOracle);
-  const { changeBps } = usePriceHistory(asset.id, asset.pricedByOracle, asset.title);
+  const metrics = useAssetMetrics(asset);
+  const { valueEur, changeBps } = metrics;
   const Icon = KIND_META[asset.kind].icon;
 
-  const { grams, valueEur } = computeValuation(asset, data, price);
-  const lockedNormalized = toCanonical18(data.lockedRaw, data.underlyingDecimals);
-
   useEffect(() => {
-    onMetrics(asset.id, {
-      valueEur,
-      changeBps,
-      lockedNormalized,
-      wrappedSupply: data.wrappedSupply,
-      oracleHealth: health,
-    });
+    onMetrics(asset.id, metrics);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [asset.id, valueEur, changeBps, lockedNormalized, data.wrappedSupply, health]);
+  }, [
+    asset.id,
+    metrics.valueEur,
+    metrics.changeBps,
+    metrics.lockedNormalized,
+    metrics.wrappedSupply,
+    metrics.oracleHealth,
+  ]);
 
   if (!data.registered) return null;
+
+  const grams = asset.kind !== "real-estate" ? Number(data.wrappedBalance) / 10 ** data.wrappedDecimals : null;
 
   return (
     <div className="flex items-center gap-4 border-b border-white/5 px-1 py-3 last:border-0">

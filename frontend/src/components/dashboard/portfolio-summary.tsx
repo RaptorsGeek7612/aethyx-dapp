@@ -5,9 +5,13 @@ import { useAccount } from "wagmi";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { ASSETS } from "@/config/assets";
 import { PortfolioAssetRow, type AssetMetrics } from "@/components/dashboard/portfolio-asset-row";
+import { PortfolioRealEstateRow } from "@/components/dashboard/portfolio-real-estate-row";
 import { CoverageMeter } from "@/components/reserve/coverage-meter";
 import { OracleStatusTile } from "@/components/dashboard/oracle-status-tile";
 import { aggregateOracleHealth } from "@/hooks/use-asset-price";
+
+const NON_REAL_ESTATE_ASSETS = ASSETS.filter((asset) => asset.kind !== "real-estate");
+const REAL_ESTATE_TIERS = ASSETS.filter((asset) => asset.kind === "real-estate");
 
 export function PortfolioSummary() {
   const { isConnected } = useAccount();
@@ -73,9 +77,12 @@ export function PortfolioSummary() {
         )}
 
         <div className="mt-5 divide-y divide-white/5">
-          {ASSETS.map((asset) => (
+          {NON_REAL_ESTATE_ASSETS.map((asset) => (
             <PortfolioAssetRow key={asset.id} asset={asset} onMetrics={handleMetrics} />
           ))}
+          {REAL_ESTATE_TIERS.length > 0 && (
+            <PortfolioRealEstateRow title="Paris Property #01" tiers={REAL_ESTATE_TIERS} onMetrics={handleMetrics} />
+          )}
         </div>
       </div>
 
