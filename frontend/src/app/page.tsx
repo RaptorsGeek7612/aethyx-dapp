@@ -1,6 +1,7 @@
 import { Header } from "@/components/header";
 import { ConfigBanner } from "@/components/config-banner";
 import { PortfolioSummary } from "@/components/dashboard/portfolio-summary";
+import { TransactionHistory } from "@/components/dashboard/transaction-history";
 
 export default function Home() {
   return (
@@ -20,6 +21,10 @@ export default function Home() {
         <ConfigBanner />
 
         <PortfolioSummary />
+
+        <div className="mt-5">
+          <TransactionHistory />
+        </div>
       </main>
 
       <footer className="border-t border-white/5 py-6 text-center text-xs text-muted-foreground">
