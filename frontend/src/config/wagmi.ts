@@ -27,12 +27,18 @@ const connectors = connectorsForWallets(
   { appName: "Invest'Or Gateway", projectId },
 );
 
+// Falls back to wagmi/viem's bundled public Sepolia endpoint when unset, same as before — but
+// that endpoint rate-limits aggressively under the getLogs-heavy price/transaction history
+// queries this app makes every 30s. Set NEXT_PUBLIC_SEPOLIA_RPC_URL to a real provider (Alchemy,
+// Infura, etc.) to avoid throttling in anything beyond light local testing.
+const sepoliaRpcUrl = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || undefined;
+
 export const wagmiConfig = createConfig({
   connectors,
   chains: [hardhat, sepolia],
   transports: {
     [hardhat.id]: http(),
-    [sepolia.id]: http(),
+    [sepolia.id]: http(sepoliaRpcUrl),
   },
   ssr: true,
 });

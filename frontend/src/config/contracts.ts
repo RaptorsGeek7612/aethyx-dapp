@@ -19,3 +19,17 @@ export const PRICE_SOURCE_ADDRESSES = rawPriceSources
 
 export const isContractsConfigured = Boolean(GATEWAY_ADDRESS && VAULT_MANAGER_ADDRESS);
 export const isOracleConfigured = Boolean(ORACLE_MANAGER_ADDRESS && PRICE_SOURCE_ADDRESSES.length > 0);
+
+// The block this deployment's contracts were created at, if known — every getLogs scan (price
+// history, transaction history) starts here instead of the chain's genesis block. Without this,
+// a naive `fromBlock: 0n` on Sepolia means scanning several million blocks on every 30s refetch,
+// which a public RPC endpoint will throttle or outright fail — the actual cause of price/history
+// data silently never loading rather than a contract or oracle problem.
+export const DEPLOYMENT_BLOCK = process.env.NEXT_PUBLIC_DEPLOYMENT_BLOCK
+  ? BigInt(process.env.NEXT_PUBLIC_DEPLOYMENT_BLOCK)
+  : null;
+
+// Fallback lookback window when DEPLOYMENT_BLOCK isn't set — roughly a month of Sepolia blocks
+// at its ~12s block time. Keeps the same "never scan from genesis" guarantee even if a future
+// deployment forgets to set NEXT_PUBLIC_DEPLOYMENT_BLOCK.
+export const LOG_LOOKBACK_BLOCKS = 200_000n;
