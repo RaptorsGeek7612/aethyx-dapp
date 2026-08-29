@@ -4,13 +4,14 @@ import { useAccount } from "wagmi";
 import { ArrowDownToLine, ArrowUpFromLine, ExternalLink } from "lucide-react";
 import { formatUnits } from "viem";
 import { useTransactionHistory, type HistoryEntry } from "@/hooks/use-transaction-history";
-import { ASSETS } from "@/config/assets";
+import { ASSETS, LEGACY_ASSET_LABELS } from "@/config/assets";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 
 const SEPOLIA_EXPLORER_TX = "https://sepolia.etherscan.io/tx/";
 
 function assetTitle(assetId: HistoryEntry["assetId"]) {
-  return ASSETS.find((a) => a.id === assetId)?.title ?? "Unknown asset";
+  return ASSETS.find((a) => a.id === assetId)?.title ?? LEGACY_ASSET_LABELS[assetId] ?? "Unknown asset";
 }
 
 // Every wrapped and underlying token in this deployment uses 18 decimals (GLDToken always mints
@@ -22,7 +23,7 @@ function formatEntryAmount(amount: bigint) {
 
 export function TransactionHistory() {
   const { isConnected } = useAccount();
-  const { entries, isLoading } = useTransactionHistory();
+  const { entries, isLoading, isError, refetch } = useTransactionHistory();
 
   return (
     <div className="glass-card rounded-2xl p-6">
@@ -36,6 +37,13 @@ export function TransactionHistory() {
         <div className="mt-3 space-y-2.5">
           <Skeleton className="h-12 w-full" />
           <Skeleton className="h-12 w-full" />
+        </div>
+      ) : isError ? (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/20 p-3 text-sm text-muted-foreground">
+          <span>Couldn&apos;t load activity — the RPC endpoint didn&apos;t respond in time.</span>
+          <Button size="sm" variant="outline" onClick={() => refetch()}>
+            Retry
+          </Button>
         </div>
       ) : entries.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">No deposits or redemptions yet.</p>

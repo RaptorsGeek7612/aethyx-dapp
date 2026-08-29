@@ -112,3 +112,14 @@ export const ASSETS: AssetDefinition[] = [
     },
   })),
 ];
+
+// Asset ids that predate a later redeploy or restructuring and are no longer in ASSETS above, but
+// still show up in wallet history (VaultManager keeps every Deposited/Redeemed event forever —
+// see useTransactionHistory). REAL_ESTATE_PARIS_01 was the single untiered real-estate market
+// deployed by the first post-ROUTER_ROLE-fix redeploy, before it was split into the five lock-up
+// tiers above; a handful of demo deposits landed on it before the split. Kept here purely so
+// TransactionHistory can label those rows instead of showing "Unknown asset" — not something a
+// depositor can act on going forward, so it's deliberately absent from ASSETS itself.
+export const LEGACY_ASSET_LABELS: Record<Hex, string> = {
+  [assetIdFromLabel("REAL_ESTATE_PARIS_01")]: "Paris Property #01 (legacy, pre-tier split)",
+};

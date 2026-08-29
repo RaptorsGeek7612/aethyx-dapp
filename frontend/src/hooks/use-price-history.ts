@@ -34,6 +34,9 @@ export function usePriceHistory(assetId: Hex, pricedByOracle: boolean | undefine
     queryKey: ["priceHistory", assetId, PRICE_SOURCE_ADDRESSES.join(",")],
     enabled,
     refetchInterval: 30_000,
+    // See useTransactionHistory for why: the default retry/backoff can leave this "loading" for
+    // the better part of a minute against a struggling RPC endpoint.
+    retry: 1,
     queryFn: async (): Promise<PricePoint[]> => {
       if (!publicClient) return [];
       const [fromBlock, toBlock] = await Promise.all([boundedFromBlock(publicClient), publicClient.getBlockNumber()]);

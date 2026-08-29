@@ -33,10 +33,15 @@ export function useTransactionHistory() {
   const publicClient = usePublicClient();
   const enabled = isContractsConfigured && Boolean(account) && Boolean(publicClient);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["transactionHistory", account, VAULT_MANAGER_ADDRESS],
     enabled,
     refetchInterval: 30_000,
+    // The default (3 retries, up to ~30s backoff each) can leave the UI showing a loading
+    // skeleton for the better part of a minute against a struggling RPC endpoint before settling
+    // into the error state below — one retry is enough to shake off a single transient failure
+    // without that wait feeling like the app is stuck.
+    retry: 1,
     queryFn: async (): Promise<HistoryEntry[]> => {
       if (!publicClient || !account) return [];
       const [fromBlock, toBlock] = await Promise.all([boundedFromBlock(publicClient), publicClient.getBlockNumber()]);
@@ -79,5 +84,5 @@ export function useTransactionHistory() {
     },
   });
 
-  return { entries: data ?? [], isLoading, refetch };
+  return { entries: data ?? [], isLoading, isError, refetch };
 }

@@ -9,21 +9,38 @@ export async function boundedFromBlock(publicClient: PublicClient): Promise<bigi
   return current > LOG_LOOKBACK_BLOCKS ? current - LOG_LOOKBACK_BLOCKS : 0n;
 }
 
-// Conservative even against stingy public RPC endpoints — e.g. Alchemy's free tier caps
-// eth_getLogs at a 10-block range (unusable for this app's multi-thousand-block history window,
-// hence not using it here — see wagmi.ts), while thirdweb's public Sepolia endpoint (the default
-// this app actually uses) allows 1000. 400 clears that with margin.
+// Only used as a fallback (see getLogsChunked) — conservative enough to clear even a stingy
+// provider like Alchemy's free tier (10-block eth_getLogs cap).
 const CHUNK_SIZE = 400n;
-// Parallel in-flight chunk requests. High enough to keep total wall-clock time reasonable over a
-// multi-week block range, low enough not to look like a burst attack to a rate limiter.
-const CONCURRENCY = 5;
+const CONCURRENCY = 3;
+
+function toLogs<event extends AbiEvent>(chunk: unknown): Log<bigint, number, false, event>[] {
+  return chunk as Log<bigint, number, false, event>[];
+}
+
+async function fetchLogs<event extends AbiEvent>(
+  publicClient: PublicClient,
+  params: { address: `0x${string}`; event: event; args?: Record<string, unknown> },
+  fromBlock: bigint,
+  toBlock: bigint,
+): Promise<Log<bigint, number, false, event>[]> {
+  // viem's getLogs overloads are a discriminated union precise enough that a generically typed
+  // params object can't satisfy any single branch — the function signatures around this file are
+  // what keep call sites type-safe; this cast just clears an internal TS limitation, not a real
+  // type hole.
+  const chunk = await publicClient.getLogs({ ...params, fromBlock, toBlock } as Parameters<PublicClient["getLogs"]>[0]);
+  return toLogs<event>(chunk);
+}
 
 /**
- * getLogs over [fromBlock, toBlock], transparently split into CHUNK_SIZE-block windows and
- * fetched with bounded concurrency. A single unchunked call over more than a handful of blocks
- * fails outright on several real Sepolia RPC providers (see CHUNK_SIZE's comment) — this is what
- * makes usePriceHistory/useTransactionHistory's queries actually succeed against them instead of
- * silently returning nothing.
+ * getLogs over [fromBlock, toBlock] — tried as a single call first, since every real RPC provider
+ * this app has actually been tested against (see wagmi.ts) tolerates the app's full
+ * several-thousand-block history window in one request, and that's a fraction of the requests
+ * chunking always would have made. Falls back to CHUNK_SIZE-block windows with bounded
+ * concurrency only if the single call fails (a stingier provider's own range limit, or a
+ * transient error) — this is what makes usePriceHistory/useTransactionHistory's queries resilient
+ * to whichever provider ends up configured, without paying the request-volume cost of chunking
+ * against providers that never needed it.
  */
 export async function getLogsChunked<const event extends AbiEvent>(
   publicClient: PublicClient,
@@ -31,6 +48,12 @@ export async function getLogsChunked<const event extends AbiEvent>(
   fromBlock: bigint,
   toBlock: bigint,
 ): Promise<Log<bigint, number, false, event>[]> {
+  try {
+    return await fetchLogs(publicClient, params, fromBlock, toBlock);
+  } catch {
+    // fall through to chunked retry below
+  }
+
   const ranges: Array<[bigint, bigint]> = [];
   for (let start = fromBlock; start <= toBlock; start += CHUNK_SIZE) {
     const end = start + CHUNK_SIZE - 1n > toBlock ? toBlock : start + CHUNK_SIZE - 1n;
@@ -40,16 +63,8 @@ export async function getLogsChunked<const event extends AbiEvent>(
   const results: Log<bigint, number, false, event>[] = [];
   for (let i = 0; i < ranges.length; i += CONCURRENCY) {
     const batch = ranges.slice(i, i + CONCURRENCY);
-    const batchResults = await Promise.all(
-      batch.map(([start, end]) =>
-        // viem's getLogs overloads are a discriminated union precise enough that a generically
-        // typed params object can't satisfy any single branch — the function signature above is
-        // what keeps this call site type-safe for callers; this cast just clears an internal
-        // TS limitation, not a real type hole.
-        publicClient.getLogs({ ...params, fromBlock: start, toBlock: end } as Parameters<PublicClient["getLogs"]>[0]),
-      ),
-    );
-    for (const chunk of batchResults) results.push(...(chunk as unknown as Log<bigint, number, false, event>[]));
+    const batchResults = await Promise.all(batch.map(([start, end]) => fetchLogs(publicClient, params, start, end)));
+    for (const chunk of batchResults) results.push(...chunk);
   }
 
   return results;
