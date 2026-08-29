@@ -89,9 +89,12 @@ SEED_NETWORK=sepolia npx hardhat run scripts/seed-demo-assets.ts --network sepol
 Deployed addresses land in `ignition/deployments/chain-<id>/deployed_addresses.json` — see the
 root README for the current Sepolia deployment's addresses.
 
-`ManualPriceSource` prices go stale after `maxStaleness` (1h by default) and `OracleManager`
-reverts rather than serve a stale price — push fresh prices again before any live demo, once per
-registered source per asset:
+`ManualPriceSource` prices go stale after `maxStaleness` and `OracleManager` reverts rather than
+serve a stale price. The Ignition module deploys with a 1h window, appropriate for active
+development; the live Sepolia deployment has been reconfigured to 30 days
+(`OracleManager.setConfig(2_592_000, maxDeviationBps, minSources)`) since nothing pushes prices on
+a schedule in this demo — a 1h window just meant the UI went "unavailable" every hour until someone
+manually refreshed it. Push fresh prices with:
 
 ```typescript
 import { network } from "hardhat";
