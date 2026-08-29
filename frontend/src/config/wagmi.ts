@@ -35,12 +35,29 @@ const connectors = connectorsForWallets(
 // the actual getLogs range limit before pointing this at anything.
 const sepoliaRpcUrl = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || undefined;
 
-export const wagmiConfig = createConfig({
-  connectors,
-  chains: [hardhat, sepolia],
-  transports: {
-    [hardhat.id]: http(),
-    [sepolia.id]: http(sepoliaRpcUrl),
-  },
-  ssr: true,
-});
+// The local Hardhat node only ever exists on a developer's own machine — including it
+// unconditionally meant the deployed site tried to reach http://127.0.0.1:8545 for anything that
+// touches every configured chain (RainbowKit's chain list, wagmi's cross-chain state sync), which
+// no visitor's browser can ever connect to. Every build served to an actual visitor (Vercel sets
+// NODE_ENV=production for `next build`; `next dev` doesn't) drops it entirely instead of failing
+// to reach it.
+const includeLocalChain = process.env.NODE_ENV !== "production";
+
+export const wagmiConfig = includeLocalChain
+  ? createConfig({
+      connectors,
+      chains: [hardhat, sepolia],
+      transports: {
+        [hardhat.id]: http(),
+        [sepolia.id]: http(sepoliaRpcUrl),
+      },
+      ssr: true,
+    })
+  : createConfig({
+      connectors,
+      chains: [sepolia],
+      transports: {
+        [sepolia.id]: http(sepoliaRpcUrl),
+      },
+      ssr: true,
+    });
