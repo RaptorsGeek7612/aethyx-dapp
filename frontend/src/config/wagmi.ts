@@ -27,10 +27,12 @@ const connectors = connectorsForWallets(
   { appName: "Invest'Or Gateway", projectId },
 );
 
-// Falls back to wagmi/viem's bundled public Sepolia endpoint when unset, same as before — but
-// that endpoint rate-limits aggressively under the getLogs-heavy price/transaction history
-// queries this app makes every 30s. Set NEXT_PUBLIC_SEPOLIA_RPC_URL to a real provider (Alchemy,
-// Infura, etc.) to avoid throttling in anything beyond light local testing.
+// Falls back to wagmi/viem's bundled public Sepolia endpoint (thirdweb's) when unset, which
+// tolerates a 1000-block eth_getLogs range — comfortably enough for lib/log-range.ts's chunked
+// queries. Set NEXT_PUBLIC_SEPOLIA_RPC_URL only to a provider that's *at least* as generous:
+// several "free tier" API keys (Alchemy's included) cap eth_getLogs at a 10-block range, which
+// is unusable for this app's price/transaction history and would silently break both — verify
+// the actual getLogs range limit before pointing this at anything.
 const sepoliaRpcUrl = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || undefined;
 
 export const wagmiConfig = createConfig({

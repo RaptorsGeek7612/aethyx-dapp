@@ -6,7 +6,7 @@ import { usePublicClient } from "wagmi";
 import { parseAbiItem, type Hex } from "viem";
 import { toast } from "sonner";
 import { PRICE_SOURCE_ADDRESSES, isOracleConfigured } from "@/config/contracts";
-import { boundedFromBlock } from "@/lib/log-range";
+import { boundedFromBlock, getLogsChunked } from "@/lib/log-range";
 
 const PRICE_UPDATED_EVENT = parseAbiItem(
   "event PriceUpdated(bytes32 indexed assetId, uint256 price, uint256 updatedAt)",
@@ -36,16 +36,10 @@ export function usePriceHistory(assetId: Hex, pricedByOracle: boolean | undefine
     refetchInterval: 30_000,
     queryFn: async (): Promise<PricePoint[]> => {
       if (!publicClient) return [];
-      const fromBlock = await boundedFromBlock(publicClient);
+      const [fromBlock, toBlock] = await Promise.all([boundedFromBlock(publicClient), publicClient.getBlockNumber()]);
       const logsPerSource = await Promise.all(
         PRICE_SOURCE_ADDRESSES.map((address) =>
-          publicClient.getLogs({
-            address,
-            event: PRICE_UPDATED_EVENT,
-            args: { assetId },
-            fromBlock,
-            toBlock: "latest",
-          }),
+          getLogsChunked(publicClient, { address, event: PRICE_UPDATED_EVENT, args: { assetId } }, fromBlock, toBlock),
         ),
       );
       return logsPerSource

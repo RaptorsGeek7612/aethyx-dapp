@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAccount, usePublicClient } from "wagmi";
 import { parseAbiItem, type Address, type Hex } from "viem";
 import { VAULT_MANAGER_ADDRESS, isContractsConfigured } from "@/config/contracts";
-import { boundedFromBlock } from "@/lib/log-range";
+import { boundedFromBlock, getLogsChunked } from "@/lib/log-range";
 
 const DEPOSITED_EVENT = parseAbiItem(
   "event Deposited(bytes32 indexed assetId, address indexed user, uint256 underlyingAmount, uint256 mintedAmount, uint256 feeAmount)",
@@ -39,23 +39,21 @@ export function useTransactionHistory() {
     refetchInterval: 30_000,
     queryFn: async (): Promise<HistoryEntry[]> => {
       if (!publicClient || !account) return [];
-      const fromBlock = await boundedFromBlock(publicClient);
+      const [fromBlock, toBlock] = await Promise.all([boundedFromBlock(publicClient), publicClient.getBlockNumber()]);
 
       const [depositLogs, redeemLogs] = await Promise.all([
-        publicClient.getLogs({
-          address: VAULT_MANAGER_ADDRESS as Address,
-          event: DEPOSITED_EVENT,
-          args: { user: account },
+        getLogsChunked(
+          publicClient,
+          { address: VAULT_MANAGER_ADDRESS as Address, event: DEPOSITED_EVENT, args: { user: account } },
           fromBlock,
-          toBlock: "latest",
-        }),
-        publicClient.getLogs({
-          address: VAULT_MANAGER_ADDRESS as Address,
-          event: REDEEMED_EVENT,
-          args: { user: account },
+          toBlock,
+        ),
+        getLogsChunked(
+          publicClient,
+          { address: VAULT_MANAGER_ADDRESS as Address, event: REDEEMED_EVENT, args: { user: account } },
           fromBlock,
-          toBlock: "latest",
-        }),
+          toBlock,
+        ),
       ]);
 
       const deposits: HistoryEntry[] = depositLogs.map((log) => ({
