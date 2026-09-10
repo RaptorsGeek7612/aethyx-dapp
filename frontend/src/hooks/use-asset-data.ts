@@ -13,7 +13,12 @@ export interface AssetOnChainData extends AssetStaticData {
   wrappedBalance: bigint;
   underlyingAllowanceForAdapter: bigint;
   wrappedAllowanceForVault: bigint;
-  lockedUntil: bigint | null;
+  /** Real estate only: deposits still inside their own lock-up. null for every other asset. */
+  lockedAmount: bigint | null;
+  /** Real estate only: deposits whose lock-up has elapsed and that are redeemable now. */
+  maturedAmount: bigint | null;
+  /** Real estate only: when the next tranche matures; 0n when nothing of theirs is locked. */
+  nextUnlockAt: bigint | null;
 }
 
 /** Adds the connected wallet's balances/allowances/lock state on top of useAssetStaticData. */
@@ -54,12 +59,24 @@ export function useAssetData(asset: AssetDefinition) {
         functionName: "allowance",
         args: [account ?? ZERO_ADDRESS, VAULT_MANAGER_ADDRESS as Address],
       },
+      // The three below revert harmlessly for non-real-estate adapters (they don't have these
+      // functions) — allowFailure means that just shows up as failed entries, not a broken batch.
       {
-        // Reverts harmlessly for non-real-estate adapters (they don't have this function) —
-        // allowFailure means that just shows up as a failed entry, not a broken batch.
         address: staticData.adapter,
         abi: realEstateAdapterAbi,
-        functionName: "lockedUntil",
+        functionName: "lockedAmountOf",
+        args: [account ?? ZERO_ADDRESS],
+      },
+      {
+        address: staticData.adapter,
+        abi: realEstateAdapterAbi,
+        functionName: "maturedAmountOf",
+        args: [account ?? ZERO_ADDRESS],
+      },
+      {
+        address: staticData.adapter,
+        abi: realEstateAdapterAbi,
+        functionName: "nextUnlockAt",
         args: [account ?? ZERO_ADDRESS],
       },
     ],
@@ -72,7 +89,9 @@ export function useAssetData(asset: AssetDefinition) {
     wrappedBalance: (userData?.[1]?.result as bigint | undefined) ?? 0n,
     underlyingAllowanceForAdapter: (userData?.[2]?.result as bigint | undefined) ?? 0n,
     wrappedAllowanceForVault: (userData?.[3]?.result as bigint | undefined) ?? 0n,
-    lockedUntil: asset.kind === "real-estate" ? ((userData?.[4]?.result as bigint | undefined) ?? null) : null,
+    lockedAmount: asset.kind === "real-estate" ? ((userData?.[4]?.result as bigint | undefined) ?? null) : null,
+    maturedAmount: asset.kind === "real-estate" ? ((userData?.[5]?.result as bigint | undefined) ?? null) : null,
+    nextUnlockAt: asset.kind === "real-estate" ? ((userData?.[6]?.result as bigint | undefined) ?? null) : null,
   };
 
   return {

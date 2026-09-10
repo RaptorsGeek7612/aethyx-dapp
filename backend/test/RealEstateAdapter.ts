@@ -95,4 +95,79 @@ describe("RealEstateAdapter — lock-up period", function () {
       "StillLocked",
     );
   });
+  it("gives each deposit its own maturity: a later deposit never postpones an earlier one", async function () {
+    const { alice, vaultManager, propertyToken, realEstateAdapter, rldToken } =
+      await networkHelpers.loadFixture(deployRealEstateFixture);
+
+    const first = ethers.parseUnits("100", 18);
+    const second = ethers.parseUnits("40", 18);
+    await propertyToken.connect(alice).approve(realEstateAdapter.target, first + second);
+
+    await vaultManager.connect(alice).deposit(REAL_ESTATE_ASSET_ID, first);
+    // Top up most of the way through the first deposit's lock-up. Under the previous
+    // single-lockedUntil design this re-locked the *whole* position for another full period.
+    await networkHelpers.time.increase(LOCKUP_PERIOD - 100n);
+    await vaultManager.connect(alice).deposit(REAL_ESTATE_ASSET_ID, second);
+
+    await networkHelpers.time.increase(101n);
+
+    // The first deposit has now matured on its own schedule; the second has not.
+    expect(await realEstateAdapter.maturedAmountOf(alice.address)).to.equal(first);
+    expect(await realEstateAdapter.lockedAmountOf(alice.address)).to.equal(second);
+
+    await rldToken.connect(alice).approve(vaultManager.target, first + second);
+    await expect(vaultManager.connect(alice).redeem(REAL_ESTATE_ASSET_ID, first + 1n)).to.be.revertedWithCustomError(
+      realEstateAdapter,
+      "StillLocked",
+    );
+    await expect(vaultManager.connect(alice).redeem(REAL_ESTATE_ASSET_ID, first)).to.emit(vaultManager, "Redeemed");
+
+    // ...and the second deposit still has to wait out the rest of its own period.
+    await expect(vaultManager.connect(alice).redeem(REAL_ESTATE_ASSET_ID, second)).to.be.revertedWithCustomError(
+      realEstateAdapter,
+      "StillLocked",
+    );
+    await networkHelpers.time.increase(LOCKUP_PERIOD);
+    await expect(vaultManager.connect(alice).redeem(REAL_ESTATE_ASSET_ID, second)).to.emit(vaultManager, "Redeemed");
+    expect(await propertyToken.balanceOf(alice.address)).to.equal(ethers.parseUnits("1000", 18));
+  });
+
+  it("reports the next tranche's unlock time while an earlier one is already redeemable", async function () {
+    const { alice, vaultManager, propertyToken, realEstateAdapter } =
+      await networkHelpers.loadFixture(deployRealEstateFixture);
+
+    const amount = ethers.parseUnits("10", 18);
+    await propertyToken.connect(alice).approve(realEstateAdapter.target, amount * 2n);
+
+    await vaultManager.connect(alice).deposit(REAL_ESTATE_ASSET_ID, amount);
+    await vaultManager.connect(alice).deposit(REAL_ESTATE_ASSET_ID, amount);
+    const secondDepositAt = BigInt(await networkHelpers.time.latest());
+
+    expect(await realEstateAdapter.nextUnlockAt(alice.address)).to.be.greaterThan(0n);
+
+    // One second short of the second tranche: a tranche is redeemable *at* unlockAt, not after,
+    // so stopping exactly on it would mature both and leave nothing to point a countdown at.
+    await networkHelpers.time.increase(LOCKUP_PERIOD - 1n);
+
+    // Only the second tranche is left locked, so that is what the countdown must point at.
+    expect(await realEstateAdapter.nextUnlockAt(alice.address)).to.equal(secondDepositAt + LOCKUP_PERIOD);
+    expect((await realEstateAdapter.lockSchedule(alice.address)).length).to.equal(2);
+  });
+
+  it("never locks a holder who acquired the wrapped token on the secondary market", async function () {
+    const { alice, bob, vaultManager, propertyToken, realEstateAdapter, rldToken } =
+      await networkHelpers.loadFixture(deployRealEstateFixture);
+
+    const amount = ethers.parseUnits("100", 18);
+    await propertyToken.connect(alice).approve(realEstateAdapter.target, amount);
+    await vaultManager.connect(alice).deposit(REAL_ESTATE_ASSET_ID, amount);
+
+    // Bob never deposited — he bought the freely-transferable wrapped token. He has no lock-up
+    // of his own to wait out, so the adapter must not hold his redemption back.
+    await rldToken.connect(alice).transfer(bob.address, amount);
+    await rldToken.connect(bob).approve(vaultManager.target, amount);
+
+    await expect(vaultManager.connect(bob).redeem(REAL_ESTATE_ASSET_ID, amount)).to.emit(vaultManager, "Redeemed");
+    expect(await propertyToken.balanceOf(bob.address)).to.equal(ethers.parseUnits("1100", 18));
+  });
 });

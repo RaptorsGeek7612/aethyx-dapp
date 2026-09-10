@@ -24,6 +24,7 @@ import { useWrapActions, type WrapStep } from "@/hooks/use-wrap-actions";
 import { useNow } from "@/hooks/use-now";
 import { computeValuation } from "@/lib/valuation";
 import { formatAmount, formatCountdown, safeParseUnits } from "@/lib/format";
+import { CANONICAL_DECIMALS } from "@/lib/decimals";
 
 const STEP_LABEL: Partial<Record<WrapStep, string>> = {
   approving: "Approving…",
@@ -84,7 +85,18 @@ export function AssetActionForm({ asset }: { asset: AssetDefinition }) {
 
   const now = useNow(30_000);
   const nowSeconds = BigInt(Math.floor(now / 1000));
-  const isLocked = data.lockedUntil !== null && data.lockedUntil > nowSeconds;
+
+  // Real estate locks each deposit on its own schedule (see RealEstateAdapter.sol), so redemption
+  // is a per-tranche cap rather than an all-or-nothing gate: while anything of theirs is still
+  // locked, the adapter only releases up to what has already matured. A holder with nothing
+  // locked — including anyone who bought the wrapped token rather than depositing — is
+  // unrestricted, which is why an absent or zero lockedAmount means "no cap" and not "zero".
+  const hasLockedTranches = data.lockedAmount !== null && data.lockedAmount > 0n;
+  const maturedAmount = data.maturedAmount ?? 0n;
+  // The adapter checks the amount it is asked to release, which is net of the redeem fee.
+  const redeemNetPreview = redeemAmountBn ? redeemAmountBn - redeemFeePreview : 0n;
+  const exceedsMatured = hasLockedTranches && redeemNetPreview > maturedAmount;
+  const nothingRedeemable = hasLockedTranches && maturedAmount === 0n;
 
   async function handleDeposit() {
     if (!depositAmountBn) return;
@@ -199,10 +211,27 @@ export function AssetActionForm({ asset }: { asset: AssetDefinition }) {
               />
             </div>
 
-            {isLocked && data.lockedUntil !== null && (
-              <div className="rounded-lg border border-primary/20 bg-primary/10 p-3 text-xs text-primary">
-                Locked for {formatCountdown(data.lockedUntil, nowSeconds)} (until{" "}
-                {new Date(Number(data.lockedUntil) * 1000).toLocaleString()})
+            {hasLockedTranches && data.lockedAmount !== null && (
+              <div className="space-y-1 rounded-lg border border-primary/20 bg-primary/10 p-3 text-xs text-primary">
+                <div className="flex justify-between">
+                  <span>Redeemable now</span>
+                  <span className="tabular-nums">
+                    {formatAmount(maturedAmount, CANONICAL_DECIMALS)} {data.wrappedSymbol}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Still locked</span>
+                  <span className="tabular-nums">
+                    {formatAmount(data.lockedAmount, CANONICAL_DECIMALS)} {data.wrappedSymbol}
+                  </span>
+                </div>
+                {data.nextUnlockAt !== null && data.nextUnlockAt > nowSeconds && (
+                  <p className="pt-0.5 opacity-80">
+                    Next tranche frees up in {formatCountdown(data.nextUnlockAt, nowSeconds)} (
+                    {new Date(Number(data.nextUnlockAt) * 1000).toLocaleString()}). Each deposit clears its own lock-up
+                    — a later one never postpones an earlier one.
+                  </p>
+                )}
               </div>
             )}
 
@@ -225,10 +254,16 @@ export function AssetActionForm({ asset }: { asset: AssetDefinition }) {
             <Button
               className="w-full"
               variant="secondary"
-              disabled={!redeemAmountBn || busy || !data.active || isLocked}
+              disabled={!redeemAmountBn || busy || !data.active || exceedsMatured}
               onClick={handleRedeem}
             >
-              {busy ? stepLabel : isLocked ? "Locked" : `Redeem ${data.wrappedSymbol}`}
+              {busy
+                ? stepLabel
+                : nothingRedeemable
+                  ? "Locked"
+                  : exceedsMatured
+                    ? "Exceeds what has matured"
+                    : `Redeem ${data.wrappedSymbol}`}
             </Button>
           </TabsContent>
         </Tabs>

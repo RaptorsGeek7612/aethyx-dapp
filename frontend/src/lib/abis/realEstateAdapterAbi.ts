@@ -78,7 +78,17 @@ export const realEstateAdapterAbi = [
       },
       {
         internalType: "uint256",
-        name: "lockedUntil",
+        name: "requested",
+        type: "uint256",
+      },
+      {
+        internalType: "uint256",
+        name: "available",
+        type: "uint256",
+      },
+      {
+        internalType: "uint256",
+        name: "nextUnlockAt",
         type: "uint256",
       },
     ],
@@ -135,11 +145,61 @@ export const realEstateAdapterAbi = [
         type: "address",
       },
     ],
-    name: "lockedUntil",
+    name: "lockSchedule",
+    outputs: [
+      {
+        components: [
+          {
+            internalType: "uint256",
+            name: "amount",
+            type: "uint256",
+          },
+          {
+            internalType: "uint256",
+            name: "unlockAt",
+            type: "uint256",
+          },
+        ],
+        internalType: "struct RealEstateAdapter.Lock[]",
+        name: "schedule",
+        type: "tuple[]",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "depositor",
+        type: "address",
+      },
+    ],
+    name: "lockedAmount",
     outputs: [
       {
         internalType: "uint256",
-        name: "lockedUntil",
+        name: "",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "depositor",
+        type: "address",
+      },
+    ],
+    name: "lockedAmountOf",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "locked",
         type: "uint256",
       },
     ],
@@ -149,6 +209,63 @@ export const realEstateAdapterAbi = [
   {
     inputs: [],
     name: "lockupPeriod",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "depositor",
+        type: "address",
+      },
+    ],
+    name: "maturedAmount",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "depositor",
+        type: "address",
+      },
+    ],
+    name: "maturedAmountOf",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "matured",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "depositor",
+        type: "address",
+      },
+    ],
+    name: "nextUnlockAt",
     outputs: [
       {
         internalType: "uint256",
