@@ -13,13 +13,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AssetActionForm } from "@/components/asset-action-dialog";
-import type { AssetDefinition } from "@/config/assets";
-
-/** The lock-up tier suffix after the em dash in a tier's title, e.g. "15-day lock" from
- *  "Paris Property #01 — 15-day lock" — see config/assets.ts's REAL_ESTATE_LOCKUP_TIERS. */
-function tierLabel(asset: AssetDefinition) {
-  return asset.title.split("—")[1]?.trim() ?? asset.title;
-}
+import { realEstateTierLabel as tierLabel, type AssetDefinition } from "@/config/assets";
 
 /**
  * Real estate has no per-deposit lock-up choice on-chain — RealEstateAdapter.lockupPeriod is

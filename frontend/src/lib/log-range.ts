@@ -9,9 +9,14 @@ export async function boundedFromBlock(publicClient: PublicClient): Promise<bigi
   return current > LOG_LOOKBACK_BLOCKS ? current - LOG_LOOKBACK_BLOCKS : 0n;
 }
 
-// Only used as a fallback (see getLogsChunked) — conservative enough to clear even a stingy
-// provider like Alchemy's free tier (10-block eth_getLogs cap).
+// Only used as a fallback (see getLogsChunked). 400 clears, with margin, the range cap of every
+// endpoint this app can actually run on — thirdweb's public Sepolia endpoint allows 1000. It does
+// NOT rescue a provider whose cap is below it: Alchemy's free tier caps eth_getLogs at 10 blocks,
+// which no practical chunk size makes usable over a multi-thousand-block history, so that tier is
+// ruled out at the RPC-choice level instead (see wagmi.ts and .env.local.example).
 const CHUNK_SIZE = 400n;
+// Parallel in-flight chunk requests: enough to keep the fallback's wall-clock time reasonable,
+// low enough not to look like a burst to the rate limiter that likely caused the fallback.
 const CONCURRENCY = 3;
 
 function toLogs<event extends AbiEvent>(chunk: unknown): Log<bigint, number, false, event>[] {
@@ -37,10 +42,10 @@ async function fetchLogs<event extends AbiEvent>(
  * this app has actually been tested against (see wagmi.ts) tolerates the app's full
  * several-thousand-block history window in one request, and that's a fraction of the requests
  * chunking always would have made. Falls back to CHUNK_SIZE-block windows with bounded
- * concurrency only if the single call fails (a stingier provider's own range limit, or a
- * transient error) — this is what makes usePriceHistory/useTransactionHistory's queries resilient
- * to whichever provider ends up configured, without paying the request-volume cost of chunking
- * against providers that never needed it.
+ * concurrency only if the single call fails (a provider's own range limit, or a transient error)
+ * — this is what makes usePriceHistory/useTransactionHistory's queries resilient to whichever
+ * provider ends up configured, without paying the request-volume cost of chunking against
+ * providers that never needed it.
  */
 export async function getLogsChunked<const event extends AbiEvent>(
   publicClient: PublicClient,

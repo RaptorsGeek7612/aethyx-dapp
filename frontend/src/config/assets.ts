@@ -57,6 +57,14 @@ export const REAL_ESTATE_LOCKUP_TIERS = [
   { key: "1Y", label: "1 year" },
 ] as const;
 
+/** The lock-up suffix after the em dash in a tier's title, e.g. "15 days" from
+ *  "Paris Property #01 — 15 days". The grouped views (RealEstateManageDialog's picker,
+ *  ReserveRealEstateCard's rows) print the property name once in their own header, so each row
+ *  only needs the part that tells the tiers apart. */
+export function realEstateTierLabel(asset: AssetDefinition): string {
+  return asset.title.split("—")[1]?.trim() ?? asset.title;
+}
+
 // VaultManager has no on-chain enumeration of registered assets (a deliberate simplicity
 // trade-off — see AssetAdapter.sol's lesson on the mapping-based registry). Until an indexer
 // or an AssetRegistered-event-based discovery feed exists, the frontend keeps its own list of

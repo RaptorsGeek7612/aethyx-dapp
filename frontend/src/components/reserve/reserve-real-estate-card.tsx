@@ -1,22 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
 import { AuditBadge } from "@/components/reserve/audit-badge";
-import type { AssetDefinition } from "@/config/assets";
+import { realEstateTierLabel, type AssetDefinition } from "@/config/assets";
 import { useAssetStaticData } from "@/hooks/use-asset-static";
 import { formatAmount } from "@/lib/format";
 import { toCanonical18 } from "@/lib/decimals";
+import { coverageSeverity, formatCoveragePct } from "@/lib/coverage";
 import { KIND_META } from "@/lib/asset-kind-meta";
 import { Skeleton } from "@/components/ui/skeleton";
-
-const GOOD = "#0ca30c";
-const WARNING = "#fab219";
-const CRITICAL = "#d03b3b";
-
-function tierLabel(asset: AssetDefinition) {
-  return asset.title.split("—")[1]?.trim() ?? asset.title;
-}
 
 function TierRow({ tier }: { tier: AssetDefinition }) {
   const { data, isLoading } = useAssetStaticData(tier);
@@ -29,32 +21,29 @@ function TierRow({ tier }: { tier: AssetDefinition }) {
   if (!data.registered) {
     return (
       <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>{tierLabel(tier)}</span>
+        <span>{realEstateTierLabel(tier)}</span>
         <span>not registered yet</span>
       </div>
     );
   }
 
-  const { color, Icon } =
-    coverageBps === null
-      ? { color: WARNING, Icon: AlertTriangle }
-      : coverageBps >= 10_000n
-        ? { color: GOOD, Icon: CheckCircle2 }
-        : coverageBps >= 9_500n
-          ? { color: WARNING, Icon: AlertTriangle }
-          : { color: CRITICAL, Icon: XCircle };
-  const pct = coverageBps === null ? null : Number(coverageBps) / 100;
+  // Same thresholds and palette as the full CoverageMeter the other reserve cards show — a tier
+  // must not read as healthier here than it would in its own card.
+  const { color, label, Icon } = coverageSeverity(coverageBps);
 
   return (
     <div className="flex items-center justify-between gap-3 text-sm">
-      <span className="font-medium">{tierLabel(tier)}</span>
+      <span className="font-medium">{realEstateTierLabel(tier)}</span>
       <span className="text-xs text-muted-foreground">
         {formatAmount(data.lockedRaw, data.underlyingDecimals)} {data.underlyingSymbol} locked ·{" "}
         {formatAmount(data.wrappedSupply, data.wrappedDecimals)} {data.wrappedSymbol} minted
       </span>
-      <span className="flex shrink-0 items-center gap-1 text-xs font-medium" style={{ color }}>
+      {/* The icon shape and the color both encode severity; the title carries it as text too, so
+          it isn't lost on a color-blind reader or a screen reader. */}
+      <span className="flex shrink-0 items-center gap-1 text-xs font-medium" style={{ color }} title={label}>
         <Icon className="h-3.5 w-3.5" aria-hidden />
-        {pct === null ? "—" : `${pct.toFixed(0)}%`}
+        <span className="sr-only">{label}: </span>
+        {formatCoveragePct(coverageBps)}
       </span>
     </div>
   );
@@ -100,6 +89,8 @@ export function ReserveRealEstateCard({
         ))}
       </div>
 
+      {/* Every tier is the same building under the same notarial attestation (they differ only in
+          lock-up length), so one badge covers all five rather than repeating it per row. */}
       <div className="mt-4">
         <AuditBadge attestation={tiers[0]?.attestation} />
       </div>
