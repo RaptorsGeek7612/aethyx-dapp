@@ -31,16 +31,30 @@ const STEP_LABEL: Partial<Record<WrapStep, string>> = {
 };
 
 /** Single-asset deposit/redeem dialog — the one Manage entry point for every asset kind,
- *  real estate included. */
+ *  real estate included.
+ *
+ *  Every opening starts from scratch: `session` increments on open and keys the form, so React
+ *  discards the previous instance rather than reusing it. That resets the typed amounts, the
+ *  selected tab and the in-flight step label. Relying on the dialog unmounting its own content
+ *  would leave that guarantee in a third-party component's hands — a half-typed amount from the
+ *  previous visit reappearing under a fresh confirmation is exactly the kind of surprise worth
+ *  spending one counter to rule out. */
 export function AssetActionDialog({ asset, trigger }: { asset: AssetDefinition; trigger: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [session, setSession] = useState(0);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) setSession((n) => n + 1);
+      }}
+    >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="glass-card sm:max-w-md">
         <AssetDialogHeader asset={asset} />
-        <AssetActionForm asset={asset} />
+        <AssetActionForm key={session} asset={asset} />
       </DialogContent>
     </Dialog>
   );
