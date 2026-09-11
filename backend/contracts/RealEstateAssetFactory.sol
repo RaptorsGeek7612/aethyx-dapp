@@ -33,6 +33,7 @@ contract RealEstateAssetFactory is AccessManaged {
     /// @param name Nom du token wrappé.
     /// @param symbol Symbole du token wrappé.
     /// @param underlying Token immobilier ERC-3643 sous-jacent.
+    /// @param lockupPeriod Durée de détention appliquée à chaque dépôt, en secondes.
     /// @param depositFeeBps Frais de dépôt, en points de base.
     /// @param redeemFeeBps Frais de rachat, en points de base.
     /// @return adapter Adaptateur déployé.
@@ -42,11 +43,17 @@ contract RealEstateAssetFactory is AccessManaged {
         string calldata name,
         string calldata symbol,
         address underlying,
+        uint256 lockupPeriod,
         uint16 depositFeeBps,
         uint16 redeemFeeBps
     ) external onlyRole(accessManager.ASSET_MANAGER_ROLE()) returns (address adapter, address wrappedToken) {
         GLDToken token = new GLDToken(name, symbol, address(accessManager));
-        RealEstateAdapter realEstateAdapter = new RealEstateAdapter(underlying, address(vaultManager), assetId);
+        RealEstateAdapter realEstateAdapter = new RealEstateAdapter(
+            underlying,
+            address(vaultManager),
+            assetId,
+            lockupPeriod
+        );
 
         vaultManager.registerAsset(assetId, address(realEstateAdapter), address(token), depositFeeBps, redeemFeeBps);
 

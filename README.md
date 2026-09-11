@@ -72,24 +72,23 @@ sous-jacent restant intégralement adossé et rachetable 1:1 par son détenteur 
 | `ChainlinkPriceSource` | Enveloppe `IPriceSource` autour d'un vrai flux Chainlink `AggregatorV3Interface` — rejette les prix nuls ou négatifs, les rounds incomplets ou périmés, normalise les décimales à 18. |
 | `Treasury` | Collecte le produit des frais de protocole. |
 
-### Note sur l'immobilier : la durée de blocage appartient au contrat
+### Note sur l'immobilier : une échéance par dépôt
 
-`RealEstateAdapter` impose une durée de détention minimale avant rachat, parce que le règlement
-d'une opération immobilière prend un temps réel. Cette durée, `lockupPeriod`, est **immuable** :
-elle est fixée une fois pour toutes au déploiement du marché, et n'est jamais un paramètre du
-dépôt. C'est ainsi qu'un protocole DeFi exprime normalement une période de détention — une
-propriété du contrat dans lequel on dépose. L'interface la lit sur l'adaptateur et l'affiche ;
-elle ne la propose pas.
+`RealEstateAdapter` impose une durée de détention minimale avant remboursement, parce que le
+règlement d'une opération immobilière prend un temps réel. Cette durée, `lockupPeriod`, est
+**immuable** : fixée au déploiement du marché, jamais choisie au dépôt.
 
-La contrainte porte sur le **collatéral du marché**, pas sur les adresses : chaque dépôt alimente
-une réserve commune qui mûrit après `lockupPeriod`, et tout rachat puise dans la part déjà mûre.
-Cadencer la sortie du collatéral plutôt que filtrer les adresses préserve la promesse du wrap — le
-token wrappé reste intégralement transférable — tout en rendant le blocage réellement contraignant.
-Une conception antérieure, indexée sur l'adresse qui rachète, se contournait par un simple
-auto-transfert : voir [`backend/AUDIT.md`](backend/AUDIT.md), constat n°1.
+Mais elle est comptée **depuis la date de chaque dépôt**. Deux dépôts espacés de trois jours
+deviennent remboursables à trois jours d'intervalle : un dépôt ultérieur ne repousse jamais un
+dépôt antérieur, et le remboursement est plafonné aux tranches échues plutôt que bloqué en tout
+ou rien. L'interface lit ce calendrier sur l'adaptateur et date chaque dépôt individuellement.
 
-Chaque dépôt garde sa propre échéance : un dépôt ultérieur ne repousse jamais un dépôt antérieur,
-et le rachat est plafonné à ce qui est mûr plutôt que bloqué en tout ou rien.
+Ce choix a un coût, documenté plutôt que tu : suivre des échéances individuelles impose de les
+indexer sur l'adresse du déposant, et le jeton wrappé étant librement transférable, un déposant
+peut l'envoyer à une seconde adresse et rembourser depuis celle-ci sans attendre. La seule forme
+non contournable — un échéancier commun au marché — supprimerait l'individualité des dépôts. Voir
+[`backend/AUDIT.md`](backend/AUDIT.md), constat n°1, où l'arbitrage est consigné comme risque
+accepté.
 
 ## Backend — Hardhat 3
 
@@ -146,15 +145,15 @@ inclure le verrouillage de `ROUTER_ROLE` et le durcissement d'`OracleManager` �
 | `ChainlinkPriceSource` (vrai flux Sepolia XAU/USD) | `0x8e6ded34eeE24F6270F696eeDFfbD479Dd0bdb4A` |
 
 Marché immobilier courant, déployé par `scripts/deploy-real-estate-market.ts` sous l'identifiant
-`REAL_ESTATE_PARIS_01_V4` (blocage de 30 jours, calendrier global) — voir
+`REAL_ESTATE_PARIS_01_V6` (30 jours, échéance par dépôt) — voir
 `ignition/deployments/chain-11155111/real_estate_market.json` :
 
 | Composant | Adresse |
 |---|---|
-| `RealEstateAdapter` | `0x7aE821eb6e47E8A2CCAf62A309e22a3762d63700` |
-| Token wrappé (`RLD`) | `0xCFBC854Fa6115DAC6B3b92C4C960dd9D77b810D8` |
+| `RealEstateAdapter` | `0x2f118f119a642D346Ff63051E6D1EEaA03d5A3eD` |
+| Token wrappé (`RLD`) | `0x7f3dF4E74E780030799e12a341D0F927275306B5` |
 | Sous-jacent ERC-3643 | `0x49CEfD290FcdCDb951E68C68cbae7400551aebf9` |
-| `RealEstateAssetFactory` (redéployée) | `0xABB4C7D09bD9e7F4a5822b37405c747B13ed71aD` |
+| `RealEstateAssetFactory` (redéployée) | voir `real_estate_market.json` |
 
 La fabrique de la table précédente (`0x0d759a29…92cE`) émettait encore l'adaptateur d'origine :
 une fabrique fige le bytecode de son adaptateur au moment où elle est compilée. Voir
@@ -205,8 +204,8 @@ configuration). Chaque paquet expose aussi les mêmes vérifications en local : 
 ## Notes de sécurité
 
 Une revue de sécurité interne des contrats est consignée dans
-[`backend/AUDIT.md`](backend/AUDIT.md) : six constats, dont un de sévérité élevée sur le
-contournement du blocage immobilier. À lire avant toute réutilisation de ce code.
+[`backend/AUDIT.md`](backend/AUDIT.md) : sept constats, dont un de sévérité élevée assumé comme
+risque accepté. À lire avant toute réutilisation de ce code.
 
 - L'`initialAdmin` d'`AccessManager` devrait être un multisig ou un timelock en production, jamais
   un simple EOA : il peut accorder et révoquer tous les rôles, y compris le sien.

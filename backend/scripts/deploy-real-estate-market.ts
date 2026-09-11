@@ -13,9 +13,10 @@ import { network } from "hardhat";
 // the market-wide schedule of e01fdf0. Deploying the fix therefore means deploying a new factory
 // first. See AUDIT.md finding 1.
 //
-// Real estate has no holding period: it deposits and redeems exactly like gold and silver. Two
-// earlier designs metered redemption here — one per depositor address, one per market — and both
-// were removed when the product settled on an asset that behaves like the others.
+// Each deposit carries its own maturity, counted from its own date — the same duration for all,
+// but two deposits three days apart become redeemable three days apart. The known escape (a
+// self-transfer redeems early) is accepted, not overlooked: see RealEstateAdapter.sol and
+// AUDIT.md finding 1.
 //
 // VaultManager.registerAsset reverts with AssetAlreadyRegistered on an id it already knows, and
 // there is no way to repoint an existing id at a new adapter, so every redeploy needs its own
@@ -30,14 +31,18 @@ import { network } from "hardhat";
 //
 // Re-running is safe: each step is skipped if it has already been done.
 
-const VERSION = "V5";
+const VERSION = "V6";
+// Durée de détention appliquée à chaque dépôt. Même durée pour tous, comptée depuis la date de
+// chaque dépôt : deux dépôts espacés de trois jours deviennent remboursables à trois jours
+// d'intervalle. Voir RealEstateAdapter.sol.
+const LOCKUP_DAYS = 30n;
 const BASE_LABEL = "REAL_ESTATE_PARIS_01";
 const LABEL = `${BASE_LABEL}_${VERSION}`;
 
 // Markets to inherit the ERC-3643 underlying from, newest first. Reusing the token rather than
 // minting a parallel one means a holder's untouched underlying balance still works with the new
 // market; each superseded market keeps custody of whatever was already deposited against it.
-const UNDERLYING_SOURCES = [`${BASE_LABEL}_V4`, `${BASE_LABEL}_V3`, BASE_LABEL];
+const UNDERLYING_SOURCES = [`${BASE_LABEL}_V5`, `${BASE_LABEL}_V4`, `${BASE_LABEL}_V3`, BASE_LABEL];
 
 const networkName = process.env.SEED_NETWORK ?? "sepolia";
 const { ethers } = await network.create({ network: networkName, chainType: "l1" });
@@ -128,7 +133,15 @@ if (!alreadyRegistered) {
   await (
     await factory
       .connect(admin)
-      .deployRealEstateAsset(assetId, "Invest'Or Real Estate", "RLD", underlyingAddress, 0n, 0n)
+      .deployRealEstateAsset(
+        assetId,
+        "Invest'Or Real Estate",
+        "RLD",
+        underlyingAddress,
+        LOCKUP_DAYS * 24n * 60n * 60n,
+        0n,
+        0n,
+      )
   ).wait();
 }
 
@@ -148,21 +161,29 @@ if (await underlying.isVerified(config.adapter)) {
 
 // --- 4. Prove what actually landed --------------------------------------------------------------
 //
-// Real estate carries no holding period any more, so the adapter must expose none of the surface
-// the two retired designs had. A factory still carrying either of them fails here rather than
-// going live with a lock-up the product has decided against.
+// A factory carries its adapter's creation bytecode, so one compiled before an adapter change
+// keeps emitting the old adapter. Read the deployed adapter back rather than trusting the
+// factory: lockSchedule(address) exists only on the per-deposit design, and lockedAmountNow()
+// only on the market-wide one this replaced. A stale factory fails here instead of going live.
 const adapter = await ethers.getContractAt("RealEstateAdapter", config.adapter);
 const code = await ethers.provider.getCode(config.adapter);
-const retired = ["lockupPeriod()", "lockedUntil(address)", "lockedAmountOf(address)", "lockedAmountNow()"];
-for (const sig of retired) {
-  const selector = ethers.id(sig).slice(2, 10);
-  if (code.includes(selector)) throw new Error(`deployed adapter still exposes ${sig} — the factory is stale`);
+if (code.includes(ethers.id("lockedAmountNow()").slice(2, 10))) {
+  throw new Error("deployed adapter meters the market, not each deposit — the factory is stale");
+}
+const lockupSeconds = await adapter.lockupPeriod();
+if (lockupSeconds !== LOCKUP_DAYS * 24n * 60n * 60n) {
+  throw new Error(`lockupPeriod reads ${lockupSeconds}s, expected ${LOCKUP_DAYS} days`);
+}
+// Reading an empty schedule back proves the per-deposit surface is actually callable, not merely
+// present in the bytecode.
+if ((await adapter.lockSchedule(admin.address)).length !== 0) {
+  throw new Error("a freshly deployed market already has locked tranches");
 }
 if ((await adapter.assetId()) !== assetId) throw new Error("deployed adapter reports a different assetId");
 if (!(await underlying.isVerified(config.adapter))) {
   throw new Error("adapter is not whitelisted on the underlying — every deposit would revert");
 }
-console.log("Verified: no lock-up surface, assetId consistent, adapter whitelisted");
+console.log(`Verified: per-deposit maturity, lockupPeriod ${lockupSeconds}s, adapter whitelisted`);
 
 // Merge rather than overwrite, so the record keeps every generation of this market.
 const outPath = `${deploymentDir}/real_estate_market.json`;
@@ -173,7 +194,8 @@ record[LABEL] = {
   wrappedToken: config.wrappedToken,
   underlying: underlyingAddress,
   factory: factoryAddress,
-  lockup: null,
+  lockupDays: Number(LOCKUP_DAYS),
+  maturityPerDeposit: true,
 };
 writeFileSync(outPath, JSON.stringify(record, null, 2) + "\n");
 console.log("\nWrote", outPath);

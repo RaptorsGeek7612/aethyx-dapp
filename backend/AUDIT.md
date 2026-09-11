@@ -9,7 +9,7 @@
 
 | # | Constat | Sévérité | Statut sur Sepolia |
 |---|---|---|---|
-| 1 | Le blocage immobilier se contourne par auto-transfert | **Élevée** | **Sans objet** — le blocage a été retiré |
+| 1 | L'échéance immobilière se contourne par auto-transfert | **Élevée** | **Risque accepté** — arbitrage produit assumé |
 | 2 | Frais réglables jusqu'à 100 % | **Moyenne** | Latent (frais à 0) |
 | 3 | Rachat de poussière : destruction sans contrepartie | **Faible** | Latent (sous-jacents en 18 décimales) |
 | 4 | `getPrice` revert sur horodatage futur, hors `try/catch` | **Faible** | Latent |
@@ -33,23 +33,23 @@ suppose d'obtenir d'abord le rachat de ces porteurs, puis de relancer le script.
 
 ---
 
-## 1. Le blocage immobilier se contourne par auto-transfert — **Élevée** · sans objet
+## 1. L'échéance immobilière se contourne par auto-transfert — **Élevée** · risque accepté
 
-> **Mise à jour.** Le blocage immobilier a été entièrement retiré après cette revue : le produit a
-> tranché en faveur d'un actif qui se dépose et se rachète comme l'or et l'argent. Le constat
-> disparaît donc parce que la fonctionnalité disparaît, non parce qu'elle a été réparée. Le marché
-> en vigueur est `REAL_ESTATE_PARIS_01_V5`, adaptateur `0xdAf164bd…9264` (3 755 octets, aucune
-> surface de blocage, vérifié par balayage des sélecteurs). Ce qui suit décrit l'état antérieur et
-> les deux tentatives de correction, conservé parce qu'il documente pourquoi un blocage indexé sur
-> l'adresse ne peut pas fonctionner sur un jeton librement transférable.
-
-**Localisation** : `RealEstateAdapter.sol`, `withdraw`
-
-```solidity
-if (lockedAmount[to] > 0 && normalizedAmount > matured) {
-    revert StillLocked(to, normalizedAmount, matured, nextUnlockAt(to));
-}
-```
+> **Mise à jour — risque accepté.** Après avoir été retiré puis rétabli, le mécanisme est
+> aujourd'hui une **échéance par dépôt** : même durée pour tous, comptée depuis la date de chaque
+> dépôt, si bien que deux dépôts espacés de trois jours deviennent remboursables à trois jours
+> d'intervalle. Marché en vigueur : `REAL_ESTATE_PARIS_01_V6`, adaptateur `0x2f118f11…A3eD`.
+>
+> Ce choix rouvre délibérément le constat ci-dessous. Des échéances individuelles doivent être
+> indexées sur l'adresse du déposant, et un jeton librement transférable permet d'en changer : le
+> contournement décrit plus bas fonctionne à nouveau. La seule parade — un échéancier commun au
+> marché — a été implémentée, déployée, puis écartée, parce qu'elle dissout précisément
+> l'individualité des dépôts que ce marché veut exprimer.
+>
+> L'arbitrage appartient au produit et il est tranché en faveur de l'individualité. Ce qui suit
+> reste donc à lire comme la description d'un risque **connu, mesuré et assumé**, pas d'un oubli.
+> Il est épinglé par un test (`test/RealEstateAdapter.ts`, « documents the accepted escape ») pour
+> qu'il ne puisse ni être oublié, ni être pris pour une régression.
 
 **Description.** Le blocage est indexé sur l'adresse qui *rachète*, pas sur les tokens. Un
 détenteur dont `lockedAmount` vaut zéro n'est soumis à aucune restriction. Or les tokens wrappés

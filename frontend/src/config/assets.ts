@@ -46,11 +46,11 @@ export interface AssetDefinition {
   appraisalValueEur?: number;
 }
 
-// Real estate has no holding period: it deposits and redeems exactly like gold and silver. Two
-// earlier designs metered redemption — one per depositor address, one per market — and both were
-// removed when the product settled on an asset that behaves like the others. Their markets are
-// listed in LEGACY_ASSET_LABELS below.
-const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V5";
+// Each real-estate deposit carries its own maturity, counted from its own date: the duration is
+// the same for all, but two deposits three days apart become redeemable three days apart. The UI
+// reads each tranche's unlock time off the adapter — see RealEstateAdapter.sol for the design and
+// for the self-transfer escape it knowingly accepts.
+const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V6";
 
 // VaultManager has no on-chain enumeration of registered assets (a deliberate simplicity
 // trade-off — see AssetAdapter.sol's lesson on the mapping-based registry). Until an indexer
@@ -123,6 +123,7 @@ export const LEGACY_ASSET_LABELS: Record<Hex, string> = {
   [assetIdFromLabel("REAL_ESTATE_PARIS_01")]: "Paris Property #01 (legacy, pre-tier split)",
   [assetIdFromLabel("REAL_ESTATE_PARIS_01_V3")]: "Paris Property #01 (legacy, pre-market-wide lock-up)",
   [assetIdFromLabel("REAL_ESTATE_PARIS_01_V4")]: "Paris Property #01 (legacy, market-wide lock-up)",
+  [assetIdFromLabel("REAL_ESTATE_PARIS_01_V5")]: "Paris Property #01 (legacy, no lock-up)",
   ...Object.fromEntries(
     RETIRED_LOCKUP_TIERS.map((key) => [
       assetIdFromLabel(`REAL_ESTATE_PARIS_01_${key}`),

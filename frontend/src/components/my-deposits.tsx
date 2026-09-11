@@ -1,9 +1,14 @@
 "use client";
 
+import { motion } from "framer-motion";
+import { Lock, Unlock } from "lucide-react";
 import type { AssetDefinition } from "@/config/assets";
 import { useAssetPositions } from "@/hooks/use-asset-positions";
+import { useLockSchedule } from "@/hooks/use-lock-schedule";
+import { useNow } from "@/hooks/use-now";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatAmount } from "@/lib/format";
+import { formatAmount, formatCountdown } from "@/lib/format";
+import { fadeUp, staggerContainer } from "@/lib/motion";
 
 /**
  * One line per deposit, under the running total — what the holding is made of, not just how big
@@ -25,41 +30,79 @@ export function MyDeposits({
   symbol: string;
 }) {
   const { positions, totalRemaining, isLoading, isError } = useAssetPositions(asset);
+  const { tranches } = useLockSchedule(asset);
+  const nowSeconds = BigInt(Math.floor(useNow(30_000) / 1000));
 
-  if (isLoading) return <Skeleton className="h-16 w-full rounded-xl" />;
+  if (isLoading) return <Skeleton className="shimmer h-16 w-full rounded-xl" />;
   if (isError || positions.length === 0) return null;
 
   const open = positions.filter((position) => position.remaining > 0n);
   const drift = walletBalance - totalRemaining;
 
+  // Les tranches encore bloquées sont les plus récentes : l'adaptateur les ouvre dans l'ordre des
+  // dépôts et les purge par l'avant. Aligner la fin des deux listes redonne donc à chaque dépôt
+  // son échéance, sans identifiant partagé entre un événement et un tableau de stockage.
+  const firstLockedIndex = positions.length - tranches.length;
+  const maturityOf = (index: number) => (index >= firstLockedIndex ? tranches[index - firstLockedIndex] : undefined);
+
   return (
-    <div className="rounded-xl border border-white/5 bg-black/20 p-4">
+    <div className="glass-card glass-card-hover rounded-xl p-4">
       <div className="flex items-baseline justify-between">
-        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">My deposits</p>
+        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">My deposits</p>
         <p className="text-[11px] text-muted-foreground">
           {positions.length} {positions.length === 1 ? "deposit" : "deposits"}
         </p>
       </div>
 
-      <div className="mt-2 space-y-1 text-xs">
-        {positions.map((position) => (
-          <a
-            key={position.transactionHash}
-            href={`https://sepolia.etherscan.io/tx/${position.transactionHash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`flex items-center justify-between gap-3 rounded-md px-1.5 py-1 transition-colors hover:bg-white/5 ${
-              position.remaining === 0n ? "text-muted-foreground line-through decoration-1" : ""
-            }`}
-          >
-            <span className="shrink-0 tabular-nums opacity-70">#{position.number}</span>
-            <span className="truncate opacity-70">block {position.blockNumber.toString()}</span>
-            <span className="shrink-0 tabular-nums">
-              {formatAmount(position.remaining, 18)} / {formatAmount(position.received, 18)} {symbol}
-            </span>
-          </a>
-        ))}
-      </div>
+      <motion.div
+        variants={staggerContainer(0.05)}
+        initial="hidden"
+        animate="visible"
+        className="mt-2 space-y-1 text-xs"
+      >
+        {positions.map((position, index) => {
+          const maturity = maturityOf(index);
+          const locked = maturity !== undefined && maturity.unlockAt > nowSeconds;
+          const spent = position.remaining === 0n;
+
+          return (
+            <motion.a
+              key={position.transactionHash}
+              variants={fadeUp}
+              href={`https://sepolia.etherscan.io/tx/${position.transactionHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={
+                maturity
+                  ? `Redeemable from ${new Date(Number(maturity.unlockAt) * 1000).toLocaleString()}`
+                  : "Redeemable now"
+              }
+              className={`flex items-center gap-3 rounded-md px-1.5 py-1.5 transition-colors hover:bg-white/5 ${
+                spent ? "text-muted-foreground line-through decoration-1" : ""
+              }`}
+            >
+              <span className="w-5 shrink-0 tabular-nums opacity-50">#{position.number}</span>
+
+              <span className="flex-1 truncate tabular-nums">
+                {formatAmount(position.remaining, 18)} / {formatAmount(position.received, 18)} {symbol}
+              </span>
+
+              {!spent &&
+                (locked ? (
+                  <span className="flex shrink-0 items-center gap-1 text-amber-400/90">
+                    <Lock className="h-3 w-3" aria-hidden />
+                    <span className="tabular-nums">{formatCountdown(maturity.unlockAt, nowSeconds)}</span>
+                  </span>
+                ) : (
+                  <span className="flex shrink-0 items-center gap-1 text-emerald-400/90">
+                    <Unlock className="h-3 w-3" aria-hidden />
+                    redeemable
+                  </span>
+                ))}
+            </motion.a>
+          );
+        })}
+      </motion.div>
 
       <div className="mt-2 flex justify-between border-t border-white/5 pt-2 text-xs font-medium">
         <span>{open.length === positions.length ? "Total" : `Total across ${open.length} open`}</span>

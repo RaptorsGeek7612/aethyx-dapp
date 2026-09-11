@@ -22,5 +22,14 @@
     "underlying": "0x49CEfD290FcdCDb951E68C68cbae7400551aebf9",
     "factory": "0xf669Bd36CF0fC728DeB4086488A221Cd044DF436",
     "lockup": null
+  },
+  "REAL_ESTATE_PARIS_01_V6": {
+    "assetId": "0xedf682a5fbb4205609264cd8595e8e097a4d7e25ddcec4e46d8f4a0511b496a4",
+    "adapter": "0x2f118f119a642D346Ff63051E6D1EEaA03d5A3eD",
+    "wrappedToken": "0x7f3dF4E74E780030799e12a341D0F927275306B5",
+    "underlying": "0x49CEfD290FcdCDb951E68C68cbae7400551aebf9",
+    "factory": "0x1cd0c39Df0135895b39cDf4f617b387607689B9D",
+    "lockupDays": 30,
+    "maturityPerDeposit": true
   }
 }

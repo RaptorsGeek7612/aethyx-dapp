@@ -87,7 +87,15 @@ if (existingRealEstate.adapter !== ethers.ZeroAddress) {
 
   const deployTx = await realEstateFactory
     .connect(admin)
-    .deployRealEstateAsset(realEstateAssetId, "Invest'Or Real Estate", "RLD", propertyToken.target, 0n, 0n);
+    .deployRealEstateAsset(
+      realEstateAssetId,
+      "Invest'Or Real Estate",
+      "RLD",
+      propertyToken.target,
+      90n * 24n * 60n * 60n,
+      0n,
+      0n,
+    );
   await deployTx.wait();
 
   const config = await vaultManager.assets(realEstateAssetId);
