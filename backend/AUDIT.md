@@ -15,16 +15,21 @@
 | 4 | `getPrice` revert sur horodatage futur, hors `try/catch` | **Faible** | Latent |
 | 5 | Valeur de retour de `transferFrom` ignorée | **Faible** | Non exploitable en l'état |
 | 6 | `registerAsset` ne vérifie pas la cohérence de l'`assetId` | **Faible** | Non exploitable en l'état |
-| 7 | Les fabriques figent le bytecode de leur adaptateur | **Moyenne** | **Corrigé** — fabrique redéployée, ancienne encore habilitée |
+| 7 | Les fabriques figent le bytecode de leur adaptateur | **Moyenne** | **Corrigé** — fabrique redéployée, ancienne révoquée |
 
 Aucun constat critique. Le constat 1 invalidait une propriété que le protocole annonce ; il est
 corrigé et déployé. Le constat 7, découvert en tentant ce déploiement, expliquait pourquoi deux
 générations de correctifs n'avaient jamais atteint la chaîne.
 
 Marché en vigueur : `REAL_ESTATE_PARIS_01_V4`, adaptateur `0x7aE821eb…3700` (6 051 octets, calendrier
-global vérifié par balayage des sélecteurs), fabrique `0xABB4C7D0…71aD`. **Reste à faire** : révoquer
-le `FACTORY_ROLE` de la fabrique remplacée `0x0d759a29…92cE`, qui peut encore enregistrer des marchés
-adossés à l'adaptateur d'origine.
+global vérifié par balayage des sélecteurs), fabrique `0xABB4C7D0…71aD`.
+
+Durcissement appliqué par `scripts/harden-legacy-real-estate.ts` : le `FACTORY_ROLE` de la fabrique
+remplacée `0x0d759a29…92cE` est révoqué, et cinq des sept marchés supersédés sont gelés. Deux
+restent actifs — `REAL_ESTATE_PARIS_01` (0,1 en circulation) et `REAL_ESTATE_PARIS_01_15D` (0,2) —
+parce que `setAssetActive(false)` bloque aussi le rachat : les geler enfermerait le collatéral de
+leurs porteurs. Un blocage contournable est un moindre mal que des fonds irrécupérables. Les fermer
+suppose d'obtenir d'abord le rachat de ces porteurs, puis de relancer le script.
 
 ---
 
