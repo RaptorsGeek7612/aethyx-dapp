@@ -9,7 +9,7 @@
 
 | # | Constat | Sévérité | Statut sur Sepolia |
 |---|---|---|---|
-| 1 | Le blocage immobilier se contourne par auto-transfert | **Élevée** | **Corrigé et déployé** |
+| 1 | Le blocage immobilier se contourne par auto-transfert | **Élevée** | **Sans objet** — le blocage a été retiré |
 | 2 | Frais réglables jusqu'à 100 % | **Moyenne** | Latent (frais à 0) |
 | 3 | Rachat de poussière : destruction sans contrepartie | **Faible** | Latent (sous-jacents en 18 décimales) |
 | 4 | `getPrice` revert sur horodatage futur, hors `try/catch` | **Faible** | Latent |
@@ -33,7 +33,15 @@ suppose d'obtenir d'abord le rachat de ces porteurs, puis de relancer le script.
 
 ---
 
-## 1. Le blocage immobilier se contourne par auto-transfert — **Élevée** · corrigé
+## 1. Le blocage immobilier se contourne par auto-transfert — **Élevée** · sans objet
+
+> **Mise à jour.** Le blocage immobilier a été entièrement retiré après cette revue : le produit a
+> tranché en faveur d'un actif qui se dépose et se rachète comme l'or et l'argent. Le constat
+> disparaît donc parce que la fonctionnalité disparaît, non parce qu'elle a été réparée. Le marché
+> en vigueur est `REAL_ESTATE_PARIS_01_V5`, adaptateur `0xdAf164bd…9264` (3 755 octets, aucune
+> surface de blocage, vérifié par balayage des sélecteurs). Ce qui suit décrit l'état antérieur et
+> les deux tentatives de correction, conservé parce qu'il documente pourquoi un blocage indexé sur
+> l'adresse ne peut pas fonctionner sur un jeton librement transférable.
 
 **Localisation** : `RealEstateAdapter.sol`, `withdraw`
 

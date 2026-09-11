@@ -21,10 +21,8 @@ import { useAssetData, type AssetOnChainData } from "@/hooks/use-asset-data";
 import { useAssetPrice, type OracleHealth } from "@/hooks/use-asset-price";
 import { usePriceHistory } from "@/hooks/use-price-history";
 import { useWrapActions, type WrapStep } from "@/hooks/use-wrap-actions";
-import { useNow } from "@/hooks/use-now";
 import { computeValuation } from "@/lib/valuation";
-import { formatAmount, formatCountdown, formatDuration, safeParseUnits } from "@/lib/format";
-import { CANONICAL_DECIMALS } from "@/lib/decimals";
+import { formatAmount, safeParseUnits } from "@/lib/format";
 
 const STEP_LABEL: Partial<Record<WrapStep, string>> = {
   approving: "Approving…",
@@ -81,21 +79,6 @@ export function AssetActionForm({ asset }: { asset: AssetDefinition }) {
 
   const depositFeePreview = depositAmountBn ? (depositAmountBn * BigInt(data.depositFeeBps)) / 10_000n : 0n;
   const redeemFeePreview = redeemAmountBn ? (redeemAmountBn * BigInt(data.redeemFeeBps)) / 10_000n : 0n;
-
-  const now = useNow(30_000);
-  const nowSeconds = BigInt(Math.floor(now / 1000));
-
-  // Real estate paces how fast collateral can leave the market, not who may take it out (see
-  // RealEstateAdapter.sol): every deposit adds a tranche that matures on its own schedule, and
-  // any redemption — whoever makes it — draws on the pool that has already matured. So the cap
-  // is a property of the market, identical for every holder, and it only bites while some of
-  // the market's collateral is still inside its lock-up.
-  const hasLockedTranches = data.lockedNow !== null && data.lockedNow > 0n;
-  const maturedAmount = data.maturedNow ?? 0n;
-  // The adapter checks the amount it is asked to release, which is net of the redeem fee.
-  const redeemNetPreview = redeemAmountBn ? redeemAmountBn - redeemFeePreview : 0n;
-  const exceedsMatured = hasLockedTranches && redeemNetPreview > maturedAmount;
-  const nothingRedeemable = hasLockedTranches && maturedAmount === 0n;
 
   async function handleDeposit() {
     if (!depositAmountBn) return;
@@ -174,14 +157,6 @@ export function AssetActionForm({ asset }: { asset: AssetDefinition }) {
                   -{formatAmount(depositFeePreview, data.underlyingDecimals)} {data.underlyingSymbol}
                 </span>
               </div>
-              {/* Read off the adapter's immutable lockupPeriod, not chosen here: the holding
-                  period is a property of the market being deposited into. */}
-              {data.lockupPeriod !== null && (
-                <div className="flex justify-between">
-                  <span>Lock-up before redemption</span>
-                  <span>{formatDuration(data.lockupPeriod)}</span>
-                </div>
-              )}
               <div className="flex justify-between font-medium text-foreground">
                 <span>You receive</span>
                 <span>
@@ -218,25 +193,6 @@ export function AssetActionForm({ asset }: { asset: AssetDefinition }) {
               />
             </div>
 
-            {hasLockedTranches && data.lockedNow !== null && (
-              <div className="space-y-1 rounded-lg border border-primary/20 bg-primary/10 p-3 text-xs text-primary">
-                <p className="pb-0.5 font-medium">This market&apos;s collateral</p>
-                <div className="flex justify-between">
-                  <span>Redeemable now</span>
-                  <span className="tabular-nums">
-                    {formatAmount(maturedAmount, CANONICAL_DECIMALS)} {data.wrappedSymbol}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Still locked</span>
-                  <span className="tabular-nums">
-                    {formatAmount(data.lockedNow, CANONICAL_DECIMALS)} {data.wrappedSymbol}
-                  </span>
-                </div>
-                <LockSchedule schedule={data.lockSchedule} symbol={data.wrappedSymbol} nowSeconds={nowSeconds} />
-              </div>
-            )}
-
             <div className="space-y-1 rounded-lg border border-white/5 bg-black/20 p-3 text-xs text-muted-foreground">
               <div className="flex justify-between">
                 <span>Protocol fee ({(data.redeemFeeBps / 100).toFixed(2)}%)</span>
@@ -256,63 +212,15 @@ export function AssetActionForm({ asset }: { asset: AssetDefinition }) {
             <Button
               className="w-full"
               variant="secondary"
-              disabled={!redeemAmountBn || busy || !data.active || exceedsMatured}
+              disabled={!redeemAmountBn || busy || !data.active}
               onClick={handleRedeem}
             >
-              {busy
-                ? stepLabel
-                : nothingRedeemable
-                  ? "Locked"
-                  : exceedsMatured
-                    ? "Exceeds what has matured"
-                    : `Redeem ${data.wrappedSymbol}`}
+              {busy ? stepLabel : `Redeem ${data.wrappedSymbol}`}
             </Button>
           </TabsContent>
         </Tabs>
       )}
     </>
-  );
-}
-
-/**
- * One row per deposit still on the market's books, each with its own countdown — never a single
- * merged total. Deposits don't accumulate into one schedule on-chain (RealEstateAdapter pushes a
- * fresh Lock per deposit and sweeps them front-to-back), so one aggregated unlock date would
- * misrepresent a market fed by several deposits: the earliest tranche frees up on its own
- * regardless of anything deposited later.
- *
- * These are the market's tranches, not the viewer's own, because the gate is market-wide —
- * showing "your" schedule would promise a redemption date the adapter does not honour.
- */
-function LockSchedule({
-  schedule,
-  symbol,
-  nowSeconds,
-}: {
-  schedule: readonly { amount: bigint; unlockAt: bigint }[] | null;
-  symbol: string;
-  nowSeconds: bigint;
-}) {
-  const pending = (schedule ?? []).filter((tranche) => tranche.unlockAt > nowSeconds);
-  if (pending.length === 0) return null;
-
-  return (
-    <div className="space-y-1 border-t border-primary/20 pt-1.5">
-      <p className="opacity-80">
-        {pending.length === 1 ? "1 deposit still locked" : `${pending.length} deposits still locked`} across this
-        market, each on its own schedule:
-      </p>
-      {pending.map((tranche, index) => (
-        <div key={`${tranche.unlockAt}-${index}`} className="flex justify-between gap-3 opacity-90">
-          <span className="tabular-nums">
-            {formatAmount(tranche.amount, CANONICAL_DECIMALS)} {symbol}
-          </span>
-          <span className="shrink-0 tabular-nums" title={new Date(Number(tranche.unlockAt) * 1000).toLocaleString()}>
-            frees up in {formatCountdown(tranche.unlockAt, nowSeconds)}
-          </span>
-        </div>
-      ))}
-    </div>
   );
 }
 

@@ -46,11 +46,11 @@ export interface AssetDefinition {
   appraisalValueEur?: number;
 }
 
-// The lock-up is not a depositor-facing choice: RealEstateAdapter.lockupPeriod is immutable,
-// set once when the market is deployed (see RealEstateAdapter.sol), which is how DeFi protocols
-// normally express a holding period — a property of the contract you deposit into, not a
-// parameter of your deposit. The UI reads it off the adapter and shows it; it never offers it.
-const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V4";
+// Real estate has no holding period: it deposits and redeems exactly like gold and silver. Two
+// earlier designs metered redemption — one per depositor address, one per market — and both were
+// removed when the product settled on an asset that behaves like the others. Their markets are
+// listed in LEGACY_ASSET_LABELS below.
+const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V5";
 
 // VaultManager has no on-chain enumeration of registered assets (a deliberate simplicity
 // trade-off — see AssetAdapter.sol's lesson on the mapping-based registry). Until an indexer
@@ -122,6 +122,7 @@ const RETIRED_LOCKUP_TIERS = ["15D", "1M", "3M", "6M", "1Y"] as const;
 export const LEGACY_ASSET_LABELS: Record<Hex, string> = {
   [assetIdFromLabel("REAL_ESTATE_PARIS_01")]: "Paris Property #01 (legacy, pre-tier split)",
   [assetIdFromLabel("REAL_ESTATE_PARIS_01_V3")]: "Paris Property #01 (legacy, pre-market-wide lock-up)",
+  [assetIdFromLabel("REAL_ESTATE_PARIS_01_V4")]: "Paris Property #01 (legacy, market-wide lock-up)",
   ...Object.fromEntries(
     RETIRED_LOCKUP_TIERS.map((key) => [
       assetIdFromLabel(`REAL_ESTATE_PARIS_01_${key}`),

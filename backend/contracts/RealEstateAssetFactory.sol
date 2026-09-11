@@ -9,10 +9,7 @@ import { RealEstateAdapter } from "./RealEstateAdapter.sol";
 /// @notice Déploie un couple token de forme GLDToken + RealEstateAdapter pour un marché
 ///         immobilier et l'enregistre dans VaultManager en une seule transaction.
 /// @dev Voir la natspec de GoldAssetFactory pour la raison d'un contrat distinct plutôt que
-///      d'une fabrique unique prenant en charge tous les types d'adaptateurs. Voir la natspec
-///      de RealEstateAdapter pour le suivi du blocage par déposant lorsque l'appel transite
-///      par InvestOrGateway, et pour la raison pour laquelle la durée de blocage appartient au
-///      marché déployé et non au dépôt.
+///      d'une fabrique unique prenant en charge tous les types d'adaptateurs.
 contract RealEstateAssetFactory is AccessManaged {
     /// @notice VaultManager dans lequel les actifs déployés sont enregistrés.
     VaultManager public immutable vaultManager;
@@ -36,7 +33,6 @@ contract RealEstateAssetFactory is AccessManaged {
     /// @param name Nom du token wrappé.
     /// @param symbol Symbole du token wrappé.
     /// @param underlying Token immobilier ERC-3643 sous-jacent.
-    /// @param lockupPeriod Durée de détention imposée, en secondes, figée pour ce marché.
     /// @param depositFeeBps Frais de dépôt, en points de base.
     /// @param redeemFeeBps Frais de rachat, en points de base.
     /// @return adapter Adaptateur déployé.
@@ -46,17 +42,11 @@ contract RealEstateAssetFactory is AccessManaged {
         string calldata name,
         string calldata symbol,
         address underlying,
-        uint256 lockupPeriod,
         uint16 depositFeeBps,
         uint16 redeemFeeBps
     ) external onlyRole(accessManager.ASSET_MANAGER_ROLE()) returns (address adapter, address wrappedToken) {
         GLDToken token = new GLDToken(name, symbol, address(accessManager));
-        RealEstateAdapter realEstateAdapter = new RealEstateAdapter(
-            underlying,
-            address(vaultManager),
-            assetId,
-            lockupPeriod
-        );
+        RealEstateAdapter realEstateAdapter = new RealEstateAdapter(underlying, address(vaultManager), assetId);
 
         vaultManager.registerAsset(assetId, address(realEstateAdapter), address(token), depositFeeBps, redeemFeeBps);
 

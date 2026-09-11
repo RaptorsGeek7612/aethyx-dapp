@@ -13,8 +13,9 @@ import { network } from "hardhat";
 // the market-wide schedule of e01fdf0. Deploying the fix therefore means deploying a new factory
 // first. See AUDIT.md finding 1.
 //
-// The lock-up is not a depositor-facing choice — RealEstateAdapter.lockupPeriod is immutable, set
-// once here, and the UI reads it off the adapter rather than offering it.
+// Real estate has no holding period: it deposits and redeems exactly like gold and silver. Two
+// earlier designs metered redemption here — one per depositor address, one per market — and both
+// were removed when the product settled on an asset that behaves like the others.
 //
 // VaultManager.registerAsset reverts with AssetAlreadyRegistered on an id it already knows, and
 // there is no way to repoint an existing id at a new adapter, so every redeploy needs its own
@@ -29,16 +30,14 @@ import { network } from "hardhat";
 //
 // Re-running is safe: each step is skipped if it has already been done.
 
-const VERSION = "V4";
-const LOCKUP_DAYS = 30n;
+const VERSION = "V5";
 const BASE_LABEL = "REAL_ESTATE_PARIS_01";
 const LABEL = `${BASE_LABEL}_${VERSION}`;
-const LOCKUP_SECONDS = LOCKUP_DAYS * 24n * 60n * 60n;
 
 // Markets to inherit the ERC-3643 underlying from, newest first. Reusing the token rather than
 // minting a parallel one means a holder's untouched underlying balance still works with the new
 // market; each superseded market keeps custody of whatever was already deposited against it.
-const UNDERLYING_SOURCES = [`${BASE_LABEL}_V3`, BASE_LABEL];
+const UNDERLYING_SOURCES = [`${BASE_LABEL}_V4`, `${BASE_LABEL}_V3`, BASE_LABEL];
 
 const networkName = process.env.SEED_NETWORK ?? "sepolia";
 const { ethers } = await network.create({ network: networkName, chainType: "l1" });
@@ -61,13 +60,24 @@ if ((await vaultManager.assets(assetId)).adapter !== ethers.ZeroAddress) {
 
 // --- 1. A factory that emits the current adapter ------------------------------------------------
 //
-// Compare the recorded factory's deployed code against what this checkout compiles. They differ
-// in length exactly when the factory carries a different adapter; immutables are written in place
-// and never change the length, so a length match means the same code.
+// Compare the recorded factory's runtime code against this checkout's. Both sides must be
+// *runtime* code: the creation bytecode an ethers ContractFactory carries is a different, longer
+// string, and comparing one against the other makes every factory look current — which is exactly
+// how a call went out to a factory whose deployRealEstateAsset still took the retired
+// lockupPeriod argument. Immutables are written in place and never change the length, so equal
+// lengths mean the same code and any difference means a different adapter or a different
+// signature.
 const recordedFactory = deployed["InvestOrGateway#RealEstateAssetFactory"];
-const localFactoryCode = (await ethers.getContractFactory("RealEstateAssetFactory")).bytecode;
-const onChainCode = await ethers.provider.getCode(recordedFactory);
-const factoryIsCurrent = onChainCode.length >= localFactoryCode.length * 0.95;
+const localRuntime = (
+  JSON.parse(readFileSync("artifacts/contracts/RealEstateAssetFactory.sol/RealEstateAssetFactory.json", "utf8")) as {
+    deployedBytecode: string;
+  }
+).deployedBytecode;
+const onChainRuntime = await ethers.provider.getCode(recordedFactory);
+const factoryIsCurrent = onChainRuntime.length === localRuntime.length;
+console.log(
+  `Recorded factory runtime ${(onChainRuntime.length - 2) / 2} bytes, this checkout ${(localRuntime.length - 2) / 2}`,
+);
 
 let factoryAddress = recordedFactory;
 if (!factoryIsCurrent) {
@@ -111,9 +121,7 @@ if (underlyingAddress === "") {
 
 // --- 3. The market ------------------------------------------------------------------------------
 await (
-  await factory
-    .connect(admin)
-    .deployRealEstateAsset(assetId, "Invest'Or Real Estate", "RLD", underlyingAddress, LOCKUP_SECONDS, 0n, 0n)
+  await factory.connect(admin).deployRealEstateAsset(assetId, "Invest'Or Real Estate", "RLD", underlyingAddress, 0n, 0n)
 ).wait();
 
 const config = await vaultManager.assets(assetId);
@@ -128,19 +136,18 @@ console.log("Adapter whitelisted on", underlyingAddress);
 
 // --- 4. Prove what actually landed --------------------------------------------------------------
 //
-// lockedAmountNow() exists only on the market-wide adapter: the per-deposit one exposed
-// lockedAmountOf(address) and the original one nothing of the sort. A factory still carrying an
-// older adapter fails here rather than going live with a lock-up a self-transfer walks past.
+// Real estate carries no holding period any more, so the adapter must expose none of the surface
+// the two retired designs had. A factory still carrying either of them fails here rather than
+// going live with a lock-up the product has decided against.
 const adapter = await ethers.getContractAt("RealEstateAdapter", config.adapter);
-const lockupSeconds = await adapter.lockupPeriod();
-if (lockupSeconds !== LOCKUP_SECONDS) {
-  throw new Error(`lockupPeriod reads ${lockupSeconds}s, expected ${LOCKUP_SECONDS}s`);
+const code = await ethers.provider.getCode(config.adapter);
+const retired = ["lockupPeriod()", "lockedUntil(address)", "lockedAmountOf(address)", "lockedAmountNow()"];
+for (const sig of retired) {
+  const selector = ethers.id(sig).slice(2, 10);
+  if (code.includes(selector)) throw new Error(`deployed adapter still exposes ${sig} — the factory is stale`);
 }
-const lockedNow = await adapter.lockedAmountNow();
-const schedule = await adapter.lockSchedule();
-console.log(
-  `Verified: market-wide adapter, lockupPeriod ${lockupSeconds}s, ${lockedNow} locked, ${schedule.length} tranches`,
-);
+if ((await adapter.assetId()) !== assetId) throw new Error("deployed adapter reports a different assetId");
+console.log("Verified: no lock-up surface, assetId consistent");
 
 // Merge rather than overwrite, so the record keeps every generation of this market.
 const outPath = `${deploymentDir}/real_estate_market.json`;
@@ -151,8 +158,7 @@ record[LABEL] = {
   wrappedToken: config.wrappedToken,
   underlying: underlyingAddress,
   factory: factoryAddress,
-  lockupDays: Number(LOCKUP_DAYS),
-  marketWideLockup: true,
+  lockup: null,
 };
 writeFileSync(outPath, JSON.stringify(record, null, 2) + "\n");
 console.log("\nWrote", outPath);

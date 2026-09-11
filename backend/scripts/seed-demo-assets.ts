@@ -85,18 +85,9 @@ if (existingRealEstate.adapter !== ethers.ZeroAddress) {
   const propertyToken = await deployMockToken("Tokenized Property", "tRE");
   console.log("REAL_ESTATE underlying deployed at", propertyToken.target);
 
-  const lockupPeriod = 90n * 24n * 60n * 60n;
   const deployTx = await realEstateFactory
     .connect(admin)
-    .deployRealEstateAsset(
-      realEstateAssetId,
-      "Invest'Or Real Estate",
-      "RLD",
-      propertyToken.target,
-      lockupPeriod,
-      0n,
-      0n,
-    );
+    .deployRealEstateAsset(realEstateAssetId, "Invest'Or Real Estate", "RLD", propertyToken.target, 0n, 0n);
   await deployTx.wait();
 
   const config = await vaultManager.assets(realEstateAssetId);
