@@ -23,7 +23,7 @@ import { usePriceHistory } from "@/hooks/use-price-history";
 import { useWrapActions, type WrapStep } from "@/hooks/use-wrap-actions";
 import { useNow } from "@/hooks/use-now";
 import { computeValuation } from "@/lib/valuation";
-import { formatAmount, formatCountdown, safeParseUnits } from "@/lib/format";
+import { formatAmount, formatCountdown, formatDuration, safeParseUnits } from "@/lib/format";
 import { CANONICAL_DECIMALS } from "@/lib/decimals";
 
 const STEP_LABEL: Partial<Record<WrapStep, string>> = {
@@ -32,9 +32,8 @@ const STEP_LABEL: Partial<Record<WrapStep, string>> = {
   confirming: "Waiting for confirmation…",
 };
 
-/** Single-asset deposit/redeem dialog — used directly for gold/silver. For real estate, this is
- *  wrapped by RealEstateManageDialog, which picks a lock-up tier first and renders AssetActionForm
- *  underneath for whichever tier's asset gets selected. */
+/** Single-asset deposit/redeem dialog — the one Manage entry point for every asset kind,
+ *  real estate included. */
 export function AssetActionDialog({ asset, trigger }: { asset: AssetDefinition; trigger: ReactNode }) {
   const [open, setOpen] = useState(false);
 
@@ -62,8 +61,8 @@ export function AssetDialogHeader({ asset }: { asset: AssetDefinition }) {
   );
 }
 
-/** The deposit/redeem form body for one specific asset — no Dialog/header of its own, so a
- *  parent (AssetActionDialog, or a tier picker like RealEstateManageDialog) controls those. */
+/** The deposit/redeem form body for one specific asset — no Dialog/header of its own, so the
+ *  parent controls those. */
 export function AssetActionForm({ asset }: { asset: AssetDefinition }) {
   const { address: account } = useAccount();
   const { data, refetch } = useAssetData(asset);
@@ -175,6 +174,14 @@ export function AssetActionForm({ asset }: { asset: AssetDefinition }) {
                   -{formatAmount(depositFeePreview, data.underlyingDecimals)} {data.underlyingSymbol}
                 </span>
               </div>
+              {/* Read off the adapter's immutable lockupPeriod, not chosen here: the holding
+                  period is a property of the market being deposited into. */}
+              {data.lockupPeriod !== null && (
+                <div className="flex justify-between">
+                  <span>Lock-up before redemption</span>
+                  <span>{formatDuration(data.lockupPeriod)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-medium text-foreground">
                 <span>You receive</span>
                 <span>

@@ -6,10 +6,10 @@ export const WARNING = "#fab219";
 export const CRITICAL = "#d03b3b";
 
 /**
- * Locked-collateral-vs-minted-supply coverage, as a status. Shared by the Reserve page's full
- * CoverageMeter and the compact per-tier rows in ReserveRealEstateCard: both views show the same
- * number, so they must not be able to drift on where "under-covered" starts or which color says
- * so. `null` means nothing has been minted yet, which is neither covered nor under-covered.
+ * Locked-collateral-vs-minted-supply coverage, as a status. Shared by every view that shows the
+ * figure — the Reserve page's per-asset cards and the dashboard's portfolio-wide rollup — so they
+ * can't drift on where "under-covered" starts or which color says so. `null` means nothing has
+ * been minted yet, which is neither covered nor under-covered.
  */
 export function coverageSeverity(coverageBps: bigint | null): {
   color: string;

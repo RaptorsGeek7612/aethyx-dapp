@@ -5,6 +5,7 @@ import type { Address } from "viem";
 import { erc20Abi } from "@/lib/abis/erc20Abi";
 import { vaultManagerAbi } from "@/lib/abis/vaultManagerAbi";
 import { assetAdapterAbi } from "@/lib/abis/assetAdapterAbi";
+import { realEstateAdapterAbi } from "@/lib/abis/realEstateAdapterAbi";
 import { VAULT_MANAGER_ADDRESS, isContractsConfigured } from "@/config/contracts";
 import type { AssetDefinition } from "@/config/assets";
 
@@ -26,6 +27,13 @@ export interface AssetStaticData {
   lockedRaw: bigint;
   /** wrappedToken.totalSupply() */
   wrappedSupply: bigint;
+  /**
+   * Real estate only: the market's holding period in seconds, read off its immutable
+   * `RealEstateAdapter.lockupPeriod`. null for every other asset, and for a real-estate market
+   * whose adapter predates the field. The depositor never picks this — it belongs to whichever
+   * market they deposit into — so the UI only ever displays it.
+   */
+  lockupPeriod: bigint | null;
 }
 
 /**
@@ -63,6 +71,9 @@ export function useAssetStaticData(asset: AssetDefinition) {
     contracts: [
       { address: adapter, abi: assetAdapterAbi, functionName: "underlying" },
       { address: adapter, abi: assetAdapterAbi, functionName: "underlyingDecimals" },
+      // Reverts harmlessly on a non-real-estate adapter, which has no such function —
+      // allowFailure turns that into one failed entry rather than a broken batch.
+      { address: adapter, abi: realEstateAdapterAbi, functionName: "lockupPeriod" },
     ],
     query: { enabled: registered },
   });
@@ -101,6 +112,7 @@ export function useAssetStaticData(asset: AssetDefinition) {
     underlyingSymbol: (tokenData?.[0]?.result as string | undefined) ?? "?",
     wrappedSupply: (tokenData?.[3]?.result as bigint | undefined) ?? 0n,
     lockedRaw: (tokenData?.[4]?.result as bigint | undefined) ?? 0n,
+    lockupPeriod: asset.kind === "real-estate" ? ((details?.[2]?.result as bigint | undefined) ?? null) : null,
   };
 
   return {

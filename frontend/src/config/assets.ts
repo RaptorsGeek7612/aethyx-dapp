@@ -46,24 +46,11 @@ export interface AssetDefinition {
   appraisalValueEur?: number;
 }
 
-// The five lock-up choices for the Paris real-estate asset, each deployed as its own
-// RealEstateAdapter + wrapped-token market (see RealEstateAssetFactory) rather than a per-deposit
-// parameter — RealEstateAdapter.lockupPeriod is set once, immutably, at deployment.
-export const REAL_ESTATE_LOCKUP_TIERS = [
-  { key: "15D", label: "15 days" },
-  { key: "1M", label: "1 month" },
-  { key: "3M", label: "3 months" },
-  { key: "6M", label: "6 months" },
-  { key: "1Y", label: "1 year" },
-] as const;
-
-/** The lock-up suffix after the em dash in a tier's title, e.g. "15 days" from
- *  "Paris Property #01 — 15 days". The grouped views (RealEstateManageDialog's picker,
- *  ReserveRealEstateCard's rows) print the property name once in their own header, so each row
- *  only needs the part that tells the tiers apart. */
-export function realEstateTierLabel(asset: AssetDefinition): string {
-  return asset.title.split("—")[1]?.trim() ?? asset.title;
-}
+// The lock-up is not a depositor-facing choice: RealEstateAdapter.lockupPeriod is immutable,
+// set once when the market is deployed (see RealEstateAdapter.sol), which is how DeFi protocols
+// normally express a holding period — a property of the contract you deposit into, not a
+// parameter of your deposit. The UI reads it off the adapter and shows it; it never offers it.
+const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V3";
 
 // VaultManager has no on-chain enumeration of registered assets (a deliberate simplicity
 // trade-off — see AssetAdapter.sol's lesson on the mapping-based registry). Until an indexer
@@ -101,33 +88,40 @@ export const ASSETS: AssetDefinition[] = [
       asOf: "2026-07-01",
     },
   },
-  ...REAL_ESTATE_LOCKUP_TIERS.map((tier): AssetDefinition => ({
-    id: assetIdFromLabel(`REAL_ESTATE_PARIS_01_${tier.key}`),
-    label: `REAL_ESTATE_PARIS_01_${tier.key}`,
+  {
+    id: assetIdFromLabel(REAL_ESTATE_LABEL),
+    label: REAL_ESTATE_LABEL,
     kind: "real-estate",
-    title: `Paris Property #01 — ${tier.label}`,
-    description: `Fractionalized real estate, locked for ${tier.label} after deposit before redemption is allowed.`,
-    // Same building tokenized across five independent lock-up markets rather than one asset
-    // with a per-deposit choice (see AssetAdapter/VaultManager's fixed deposit(from, amount)
-    // signature) — each market gets its own underlying token and its own slice of the
-    // appraisal, so summing across all five still totals the building's real value instead of
-    // multiplying it by five.
-    appraisalValueEur: 235_000 / REAL_ESTATE_LOCKUP_TIERS.length,
+    title: "Paris Property #01",
+    description:
+      "Fractionalized real estate. Deposits are locked for the market's own holding period before redemption is allowed.",
+    // One market for the whole building, so this is the whole appraisal — it used to be split
+    // five ways across the lock-up tiers precisely so summing them didn't multiply the building
+    // by five.
+    appraisalValueEur: 235_000,
     attestation: {
       verified: true,
       auditor: "Notaire de Paris — Étude XYZ",
       asOf: "2026-06-15",
     },
-  })),
+  },
 ];
 
 // Asset ids that predate a later redeploy or restructuring and are no longer in ASSETS above, but
 // still show up in wallet history (VaultManager keeps every Deposited/Redeemed event forever —
-// see useTransactionHistory). REAL_ESTATE_PARIS_01 was the single untiered real-estate market
-// deployed by the first post-ROUTER_ROLE-fix redeploy, before it was split into the five lock-up
-// tiers above; a handful of demo deposits landed on it before the split. Kept here purely so
-// TransactionHistory can label those rows instead of showing "Unknown asset" — not something a
-// depositor can act on going forward, so it's deliberately absent from ASSETS itself.
+// see useTransactionHistory). Two generations of real-estate market sit here: REAL_ESTATE_PARIS_01,
+// the single untiered market from the first post-ROUTER_ROLE-fix redeploy, and the five
+// per-lock-up tiers that briefly replaced it while the lock-up was a depositor-facing choice.
+// Kept here purely so TransactionHistory can label those rows instead of showing "Unknown asset" —
+// not something a depositor can act on going forward, so they're deliberately absent from ASSETS.
+const RETIRED_LOCKUP_TIERS = ["15D", "1M", "3M", "6M", "1Y"] as const;
+
 export const LEGACY_ASSET_LABELS: Record<Hex, string> = {
   [assetIdFromLabel("REAL_ESTATE_PARIS_01")]: "Paris Property #01 (legacy, pre-tier split)",
+  ...Object.fromEntries(
+    RETIRED_LOCKUP_TIERS.map((key) => [
+      assetIdFromLabel(`REAL_ESTATE_PARIS_01_${key}`),
+      `Paris Property #01 (legacy, ${key} lock-up tier)`,
+    ]),
+  ),
 };

@@ -38,3 +38,25 @@ export function formatCountdown(targetSeconds: bigint, nowSeconds: bigint): stri
   if (hours > 0n) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
 }
+
+/** A contract-configured duration in seconds, in the coarsest unit that divides it exactly —
+ *  "1 year" rather than "365 days". Lock-up periods are set in whole days/months/years, so an
+ *  exact division is the normal case; anything else falls back to days. */
+export function formatDuration(seconds: bigint): string {
+  const units: [bigint, string][] = [
+    [31_536_000n, "year"],
+    [2_592_000n, "month"],
+    [604_800n, "week"],
+    [86_400n, "day"],
+    [3_600n, "hour"],
+    [60n, "minute"],
+  ];
+  for (const [size, name] of units) {
+    if (seconds >= size && seconds % size === 0n) {
+      const count = seconds / size;
+      return `${count} ${name}${count === 1n ? "" : "s"}`;
+    }
+  }
+  if (seconds >= 86_400n) return `${seconds / 86_400n} days`;
+  return `${seconds} seconds`;
+}

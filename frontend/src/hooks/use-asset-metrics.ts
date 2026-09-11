@@ -17,8 +17,7 @@ export interface AssetMetrics {
 
 /** One asset's contribution to a portfolio summary — the connected wallet's holding, valued at
  *  the live oracle price (gold/silver) or static appraisal share (real estate), plus the pieces
- *  a coverage/oracle-health rollup needs. Shared by PortfolioAssetRow and the real-estate group
- *  row so both compute "my portfolio" the same way. */
+ *  a coverage/oracle-health rollup needs. */
 export function useAssetMetrics(asset: AssetDefinition): AssetMetrics {
   const { data } = useAssetData(asset);
   const { price, health } = useAssetPrice(asset.id, asset.pricedByOracle);
