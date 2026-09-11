@@ -81,9 +81,15 @@ dépôt. C'est ainsi qu'un protocole DeFi exprime normalement une période de d�
 propriété du contrat dans lequel on dépose. L'interface la lit sur l'adaptateur et l'affiche ;
 elle ne la propose pas.
 
-Chaque dépôt arrive à échéance selon son propre calendrier : un dépôt ultérieur ne repousse
-jamais un dépôt antérieur, et le rachat est plafonné à ce qui est arrivé à échéance plutôt que
-bloqué en tout ou rien.
+La contrainte porte sur le **collatéral du marché**, pas sur les adresses : chaque dépôt alimente
+une réserve commune qui mûrit après `lockupPeriod`, et tout rachat puise dans la part déjà mûre.
+Cadencer la sortie du collatéral plutôt que filtrer les adresses préserve la promesse du wrap — le
+token wrappé reste intégralement transférable — tout en rendant le blocage réellement contraignant.
+Une conception antérieure, indexée sur l'adresse qui rachète, se contournait par un simple
+auto-transfert : voir [`backend/AUDIT.md`](backend/AUDIT.md), constat n°1.
+
+Chaque dépôt garde sa propre échéance : un dépôt ultérieur ne repousse jamais un dépôt antérieur,
+et le rachat est plafonné à ce qui est mûr plutôt que bloqué en tout ou rien.
 
 ## Backend — Hardhat 3
 

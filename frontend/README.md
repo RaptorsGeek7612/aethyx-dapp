@@ -82,6 +82,10 @@ tranche par dépôt et les purge de la plus ancienne à la plus récente. L'inte
 `lockSchedule()` et affiche une ligne par dépôt encore bloqué, avec son propre décompte — la
 tranche la plus ancienne se libère à son heure, quoi qu'on ait déposé ensuite.
 
+Ce calendrier est celui du **marché**, pas du porteur qui le consulte, parce que le plafond de
+rachat l'est aussi. Afficher « ton » échéancier promettrait une date que l'adaptateur n'honore
+pas : c'est la réserve mûre du marché qui autorise un rachat, identique pour tous.
+
 ## Déploiement
 
 En ligne sur **[investor-gateway.vercel.app](https://investor-gateway.vercel.app)**. Pour

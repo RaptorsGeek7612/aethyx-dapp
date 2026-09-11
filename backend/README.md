@@ -67,13 +67,19 @@ réentrer `VaultManager`, pour les tests de protection contre la réentrance).
 ### L'immobilier : la durée de blocage appartient au marché
 
 `RealEstateAdapter.lockupPeriod` est immuable, fixée au déploiement du marché. Ce n'est jamais un
-paramètre du dépôt, et l'interface se contente de la lire et de l'afficher. Chaque dépôt arrive à
-échéance selon son propre calendrier : un dépôt ultérieur ne repousse jamais un dépôt antérieur,
-et `withdraw` plafonne la libération à ce qui est arrivé à échéance au lieu de refuser en bloc.
+paramètre du dépôt, et l'interface se contente de la lire et de l'afficher.
 
-Un détenteur qui n'a jamais déposé — quelqu'un qui a acheté le token wrappé sur le marché
-secondaire — n'est soumis à aucun blocage : le blocage ne retient que les tranches non échues du
-déposant lui-même.
+Le blocage porte sur le **collatéral du marché**, pas sur les adresses : chaque dépôt ajoute au
+calendrier commun une tranche qui mûrit après `lockupPeriod`, et `withdraw` plafonne la libération
+à ce que le marché a de mûr, quel que soit le racheteur. Le token wrappé, lui, reste intégralement
+transférable à tout instant — seule sa conversion en sous-jacent est cadencée.
+
+Chaque dépôt garde sa propre échéance : un dépôt ultérieur ne repousse jamais un dépôt antérieur.
+
+Une conception antérieure indexait le blocage sur l'adresse qui rachète, en exemptant qui n'avait
+jamais déposé. Le token wrappé étant librement transférable, cette exemption s'obtenait par un
+simple auto-transfert et le blocage ne contraignait personne — voir [`AUDIT.md`](AUDIT.md),
+constat n°1.
 
 ## Déploiement local
 

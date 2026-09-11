@@ -30,10 +30,6 @@ export function ReserveValueReporter({
     wrappedBalance: staticData.wrappedSupply,
     underlyingAllowanceForAdapter: 0n,
     wrappedAllowanceForVault: 0n,
-    lockedAmount: null,
-    maturedAmount: null,
-    nextUnlockAt: null,
-    lockSchedule: null,
   };
   const { valueEur } = computeValuation(asset, data, price);
 

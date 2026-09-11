@@ -9,18 +9,20 @@
 
 | # | Constat | Sévérité | Statut sur Sepolia |
 |---|---|---|---|
-| 1 | Le blocage immobilier se contourne par auto-transfert | **Élevée** | Exploitable |
+| 1 | Le blocage immobilier se contourne par auto-transfert | **Élevée** | **Corrigé** — non redéployé |
 | 2 | Frais réglables jusqu'à 100 % | **Moyenne** | Latent (frais à 0) |
 | 3 | Rachat de poussière : destruction sans contrepartie | **Faible** | Latent (sous-jacents en 18 décimales) |
 | 4 | `getPrice` revert sur horodatage futur, hors `try/catch` | **Faible** | Latent |
 | 5 | Valeur de retour de `transferFrom` ignorée | **Faible** | Non exploitable en l'état |
 | 6 | `registerAsset` ne vérifie pas la cohérence de l'`assetId` | **Faible** | Non exploitable en l'état |
 
-Aucun constat critique. Le constat 1 invalide en revanche une propriété que le protocole annonce.
+Aucun constat critique. Le constat 1 invalidait une propriété que le protocole annonce ; il a été
+corrigé dans le code après cette revue (voir sa section). **Le marché déployé sur Sepolia porte
+encore l'adaptateur vulnérable** : la correction n'entrera en vigueur qu'au prochain déploiement.
 
 ---
 
-## 1. Le blocage immobilier se contourne par auto-transfert — **Élevée**
+## 1. Le blocage immobilier se contourne par auto-transfert — **Élevée** · corrigé
 
 **Localisation** : `RealEstateAdapter.sol`, `withdraw`
 
@@ -66,7 +68,33 @@ directions possibles :
   défaut, contournable. C'est le choix le moins coûteux, mais il doit être explicite dans
   l'interface comme dans la documentation.
 
-Tant que l'arbitrage n'est pas tranché, ne pas présenter le blocage comme une protection.
+**Correction retenue.** Aucune des trois directions ci-dessus n'a été suivie telle quelle : la
+première sacrifie la libre transférabilité, qui est la raison d'être du protocole, et la deuxième
+rouvre le problème de signature partagée qui avait déjà fait écarter un paramètre par dépôt.
+
+La bonne question n'est pas « qui a le droit de racheter » mais « à quelle vitesse le collatéral
+peut sortir » — c'est le règlement immobilier qui prend du temps, pas la personne. Le blocage est
+donc désormais **un échéancier global au marché** : chaque dépôt alimente une réserve commune qui
+mûrit après `lockupPeriod`, et tout rachat puise dans la part déjà mûre, quel qu'en soit l'auteur.
+
+L'auto-transfert ne contourne plus rien : la seconde adresse puise dans la même réserve. Et le
+token wrappé reste intégralement transférable — seule sa conversion en sous-jacent est cadencée.
+
+Conséquences :
+
+- Les vues perdent leur paramètre d'adresse : `lockedAmountNow()`, `maturedAmountNow()`,
+  `nextUnlockAt()`, `lockSchedule()`. Les anciennes signatures disparaissent plutôt que de changer
+  de sens en silence, afin qu'un appelant resté sur l'ancienne ABI échoue franchement.
+- Un acheteur de marché secondaire attend désormais la maturité du marché. C'est la situation
+  économiquement honnête : le collatéral n'est réellement pas liquide avant, et le calendrier est
+  lisible on-chain avant tout achat.
+- Le test `test/RealEstateAdapter.ts` qui assertissait la réussite du contournement a été remplacé
+  par deux tests : l'un vérifie que l'auto-transfert échoue puis réussit après maturité, l'autre
+  que le token wrappé reste transférable pendant le blocage.
+
+**Non déployé.** L'adaptateur en place sur Sepolia (`0x36b88A2b…C69B`) reste celui d'avant
+correction. Fermer la faille exige un nouveau déploiement sous un nouvel `assetId`, `registerAsset`
+refusant de repointer un identifiant existant.
 
 ---
 

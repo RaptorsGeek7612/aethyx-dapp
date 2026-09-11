@@ -68,7 +68,7 @@ describe("RealEstateAdapter — lock-up period", function () {
     expect(await propertyToken.balanceOf(alice.address)).to.equal(ethers.parseUnits("1000", 18));
   });
 
-  it("tracks the lock-up per real end user, not per Gateway, when routed through the Gateway", async function () {
+  it("meters the market's collateral, not the Gateway's address, when routed through the Gateway", async function () {
     const { alice, bob, gateway, vaultManager, propertyToken, realEstateAdapter, rldToken } =
       await networkHelpers.loadFixture(deployRealEstateFixture);
 
@@ -79,22 +79,23 @@ describe("RealEstateAdapter — lock-up period", function () {
 
     await networkHelpers.time.increase(LOCKUP_PERIOD + 1n);
 
-    // Bob deposits right after Alice's lock-up has already expired. If the lock-up were keyed
-    // on the Gateway's own address (the bug this fix resolves), Bob's fresh deposit would
-    // reset a *shared* lock and incorrectly block Alice's now-eligible redemption below.
+    // Bob deposits once Alice's tranche has already matured. His fresh, still-locked tranche
+    // must not eat into the matured pool Alice is entitled to draw on.
     await propertyToken.connect(bob).approve(realEstateAdapter.target, amount);
     await gateway.connect(bob).deposit(REAL_ESTATE_ASSET_ID, amount);
 
     await rldToken.connect(alice).approve(vaultManager.target, amount);
     await expect(gateway.connect(alice).redeem(REAL_ESTATE_ASSET_ID, amount)).to.emit(vaultManager, "Redeemed");
 
-    // Bob, having just deposited, is still correctly locked on his own account.
+    // Alice's redemption drained the matured pool; Bob's own tranche is still locked, so there
+    // is nothing left for him to draw on yet.
     await rldToken.connect(bob).approve(vaultManager.target, amount);
     await expect(gateway.connect(bob).redeem(REAL_ESTATE_ASSET_ID, amount)).to.be.revertedWithCustomError(
       realEstateAdapter,
       "StillLocked",
     );
   });
+
   it("gives each deposit its own maturity: a later deposit never postpones an earlier one", async function () {
     const { alice, vaultManager, propertyToken, realEstateAdapter, rldToken } =
       await networkHelpers.loadFixture(deployRealEstateFixture);
@@ -112,8 +113,8 @@ describe("RealEstateAdapter — lock-up period", function () {
     await networkHelpers.time.increase(101n);
 
     // The first deposit has now matured on its own schedule; the second has not.
-    expect(await realEstateAdapter.maturedAmountOf(alice.address)).to.equal(first);
-    expect(await realEstateAdapter.lockedAmountOf(alice.address)).to.equal(second);
+    expect(await realEstateAdapter.maturedAmountNow()).to.equal(first);
+    expect(await realEstateAdapter.lockedAmountNow()).to.equal(second);
 
     await rldToken.connect(alice).approve(vaultManager.target, first + second);
     await expect(vaultManager.connect(alice).redeem(REAL_ESTATE_ASSET_ID, first + 1n)).to.be.revertedWithCustomError(
@@ -143,18 +144,18 @@ describe("RealEstateAdapter — lock-up period", function () {
     await vaultManager.connect(alice).deposit(REAL_ESTATE_ASSET_ID, amount);
     const secondDepositAt = BigInt(await networkHelpers.time.latest());
 
-    expect(await realEstateAdapter.nextUnlockAt(alice.address)).to.be.greaterThan(0n);
+    expect(await realEstateAdapter.nextUnlockAt()).to.be.greaterThan(0n);
 
     // One second short of the second tranche: a tranche is redeemable *at* unlockAt, not after,
     // so stopping exactly on it would mature both and leave nothing to point a countdown at.
     await networkHelpers.time.increase(LOCKUP_PERIOD - 1n);
 
     // Only the second tranche is left locked, so that is what the countdown must point at.
-    expect(await realEstateAdapter.nextUnlockAt(alice.address)).to.equal(secondDepositAt + LOCKUP_PERIOD);
-    expect((await realEstateAdapter.lockSchedule(alice.address)).length).to.equal(2);
+    expect(await realEstateAdapter.nextUnlockAt()).to.equal(secondDepositAt + LOCKUP_PERIOD);
+    expect((await realEstateAdapter.lockSchedule()).length).to.equal(2);
   });
 
-  it("never locks a holder who acquired the wrapped token on the secondary market", async function () {
+  it("cannot be escaped by moving the wrapped token to another address before redeeming", async function () {
     const { alice, bob, vaultManager, propertyToken, realEstateAdapter, rldToken } =
       await networkHelpers.loadFixture(deployRealEstateFixture);
 
@@ -162,12 +163,39 @@ describe("RealEstateAdapter — lock-up period", function () {
     await propertyToken.connect(alice).approve(realEstateAdapter.target, amount);
     await vaultManager.connect(alice).deposit(REAL_ESTATE_ASSET_ID, amount);
 
-    // Bob never deposited — he bought the freely-transferable wrapped token. He has no lock-up
-    // of his own to wait out, so the adapter must not hold his redemption back.
+    // The escape the previous per-address design allowed: send the freely-transferable wrapped
+    // token to a second address and redeem from there, where no lock had ever been recorded.
+    // Nothing on-chain distinguishes that from a genuine secondary-market sale, which is exactly
+    // why the gate cannot be keyed on who is redeeming.
     await rldToken.connect(alice).transfer(bob.address, amount);
     await rldToken.connect(bob).approve(vaultManager.target, amount);
 
+    await expect(vaultManager.connect(bob).redeem(REAL_ESTATE_ASSET_ID, amount)).to.be.revertedWithCustomError(
+      realEstateAdapter,
+      "StillLocked",
+    );
+    expect(await propertyToken.balanceOf(bob.address)).to.equal(ethers.parseUnits("1000", 18));
+
+    // Once the market's collateral has matured, that same holder redeems freely: the lock-up
+    // paces the collateral's exit, it never singles out a holder.
+    await networkHelpers.time.increase(LOCKUP_PERIOD + 1n);
     await expect(vaultManager.connect(bob).redeem(REAL_ESTATE_ASSET_ID, amount)).to.emit(vaultManager, "Redeemed");
     expect(await propertyToken.balanceOf(bob.address)).to.equal(ethers.parseUnits("1100", 18));
+  });
+
+  it("keeps the wrapped token transferable while its collateral is still locked", async function () {
+    const { alice, bob, vaultManager, propertyToken, realEstateAdapter, rldToken } =
+      await networkHelpers.loadFixture(deployRealEstateFixture);
+
+    const amount = ethers.parseUnits("100", 18);
+    await propertyToken.connect(alice).approve(realEstateAdapter.target, amount);
+    await vaultManager.connect(alice).deposit(REAL_ESTATE_ASSET_ID, amount);
+
+    // The whole point of the wrap: the ERC-20 circulates even while the underlying cannot yet be
+    // released. Only redemption is metered, never transfer.
+    await rldToken.connect(alice).transfer(bob.address, amount);
+    expect(await rldToken.balanceOf(bob.address)).to.equal(amount);
+    expect(await rldToken.balanceOf(alice.address)).to.equal(0n);
+    expect(await realEstateAdapter.lockedAmountNow()).to.equal(amount);
   });
 });

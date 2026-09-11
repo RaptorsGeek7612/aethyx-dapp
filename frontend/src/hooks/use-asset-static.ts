@@ -34,6 +34,22 @@ export interface AssetStaticData {
    * market they deposit into — so the UI only ever displays it.
    */
   lockupPeriod: bigint | null;
+  /**
+   * Real estate only: the market's collateral that has cleared its lock-up and can be redeemed
+   * right now, across every holder. The gate is market-wide, not per holder — see
+   * RealEstateAdapter.sol — so this is what actually caps any redemption.
+   */
+  maturedNow: bigint | null;
+  /** Real estate only: the market's collateral still inside its lock-up. */
+  lockedNow: bigint | null;
+  /** Real estate only: when the market's next tranche matures; 0n when nothing is locked. */
+  nextUnlockAt: bigint | null;
+  /**
+   * Real estate only: one entry per deposit still on the market's books, each with its own
+   * maturity. Deposits never merge into one schedule — a later one gets its own entry rather
+   * than extending an earlier one.
+   */
+  lockSchedule: readonly { amount: bigint; unlockAt: bigint }[] | null;
 }
 
 /**
@@ -71,9 +87,13 @@ export function useAssetStaticData(asset: AssetDefinition) {
     contracts: [
       { address: adapter, abi: assetAdapterAbi, functionName: "underlying" },
       { address: adapter, abi: assetAdapterAbi, functionName: "underlyingDecimals" },
-      // Reverts harmlessly on a non-real-estate adapter, which has no such function —
-      // allowFailure turns that into one failed entry rather than a broken batch.
+      // The four below revert harmlessly on a non-real-estate adapter, which has no such
+      // functions — allowFailure turns that into failed entries rather than a broken batch.
       { address: adapter, abi: realEstateAdapterAbi, functionName: "lockupPeriod" },
+      { address: adapter, abi: realEstateAdapterAbi, functionName: "maturedAmountNow" },
+      { address: adapter, abi: realEstateAdapterAbi, functionName: "lockedAmountNow" },
+      { address: adapter, abi: realEstateAdapterAbi, functionName: "nextUnlockAt" },
+      { address: adapter, abi: realEstateAdapterAbi, functionName: "lockSchedule" },
     ],
     query: { enabled: registered },
   });
@@ -98,6 +118,8 @@ export function useAssetStaticData(asset: AssetDefinition) {
     query: { enabled: canReadTokenData },
   });
 
+  const isRealEstate = asset.kind === "real-estate";
+
   const data: AssetStaticData = {
     adapter,
     wrappedToken,
@@ -112,7 +134,13 @@ export function useAssetStaticData(asset: AssetDefinition) {
     underlyingSymbol: (tokenData?.[0]?.result as string | undefined) ?? "?",
     wrappedSupply: (tokenData?.[3]?.result as bigint | undefined) ?? 0n,
     lockedRaw: (tokenData?.[4]?.result as bigint | undefined) ?? 0n,
-    lockupPeriod: asset.kind === "real-estate" ? ((details?.[2]?.result as bigint | undefined) ?? null) : null,
+    lockupPeriod: isRealEstate ? ((details?.[2]?.result as bigint | undefined) ?? null) : null,
+    maturedNow: isRealEstate ? ((details?.[3]?.result as bigint | undefined) ?? null) : null,
+    lockedNow: isRealEstate ? ((details?.[4]?.result as bigint | undefined) ?? null) : null,
+    nextUnlockAt: isRealEstate ? ((details?.[5]?.result as bigint | undefined) ?? null) : null,
+    lockSchedule: isRealEstate
+      ? ((details?.[6]?.result as readonly { amount: bigint; unlockAt: bigint }[] | undefined) ?? null)
+      : null,
   };
 
   return {
