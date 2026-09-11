@@ -1,0 +1,29 @@
+# Racine de workspace du dépôt. Sa présence est nécessaire, pas seulement pratique : sans elle,
+# pnpm remonte l'arborescence jusqu'au premier pnpm-workspace.yaml trouvé — en l'occurrence un
+# fichier résiduel dans le répertoire personnel — et considère alors tout le home comme le
+# workspace, si bien qu'une installation lancée depuis backend/ ou frontend/ n'y fait rien.
+packages:
+  - backend
+  - frontend
+
+# Les scripts d'installation sont bloqués par défaut : un postinstall est du code arbitraire
+# exécuté sur la machine qui installe, et sur celle de la CI. Chaque autorisation ci-dessous
+# répond à un besoin réel ; tout ce qui n'y figure pas reste bloqué.
+allowBuilds:
+  esbuild: true # télécharge et lie son binaire natif ; sans lui, il ne démarre pas
+  keccak: true # addon natif de hachage, utilisé par la pile Hardhat/ethereumjs
+  sharp: true # optimisation d'images de Next.js en production
+  unrs-resolver: true # résolveur natif d'eslint-plugin-import
+  '@arbitrum/nitro-contracts': false # contrats Solidity : rien à construire à l'installation
+  bufferutil: false # accélération facultative de ws — la version JavaScript suffit
+  utf-8-validate: false # idem
+
+# @chainlink/contracts tire @zksync/contracts depuis un dépôt git, et pnpm refuse par défaut les
+# sous-dépendances résolues ainsi — à raison : une référence git n'est pas immuable comme une
+# version publiée sur le registre, son contenu peut changer sous le même identifiant.
+#
+# L'exception est assumée plutôt que subie. Elle ne concerne que la compilation des contrats
+# (ChainlinkPriceSource n'importe qu'AggregatorV3Interface, une vingtaine de lignes) et rien de ce
+# code n'atteint le navigateur. Le correctif durable est de recopier cette interface dans
+# contracts/interfaces/ et de retirer la dépendance : ce réglage deviendrait alors inutile.
+blockExoticSubdeps: false

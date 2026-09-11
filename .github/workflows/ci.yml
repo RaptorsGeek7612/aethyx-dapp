@@ -15,32 +15,40 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # pnpm avant setup-node : c'est ce qui permet à setup-node de trouver le store pnpm et de
+      # le mettre en cache. L'ordre inverse laisse le cache vide sans signaler d'erreur.
+      - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
+      # --frozen-lockfile fait échouer le job si le lockfile ne correspond plus aux package.json,
+      # au lieu de le mettre à jour en silence : la CI doit installer exactement ce qui a été
+      # relu et committé, jamais une résolution fraîche.
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
+        working-directory: .
 
       - name: Compile contracts
-        run: npx hardhat build
+        run: pnpm exec hardhat build
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: pnpm exec tsc --noEmit
 
       - name: Run Solidity + TypeScript tests
-        run: npx hardhat test
+        run: pnpm exec hardhat test
 
       - name: Lint Solidity (solhint)
-        run: npm run lint:sol
+        run: pnpm run lint:sol
 
       - name: Lint TypeScript (eslint)
-        run: npm run lint:ts
+        run: pnpm run lint:ts
 
       - name: Check formatting (Prettier)
-        run: npm run format:check
+        run: pnpm run format:check
 
   frontend:
     name: Frontend — lint, typecheck, build
@@ -51,26 +59,29 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
+        working-directory: .
 
       - name: Lint (eslint)
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Check formatting (Prettier)
-        run: npm run format:check
+        run: pnpm run format:check
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: pnpm exec tsc --noEmit
 
       - name: Build
-        # No NEXT_PUBLIC_* contract addresses are set in CI — config/contracts.ts is designed to
-        # fall back to an "unconfigured" state instead of crashing, so the build must succeed
-        # without them (see isContractsConfigured/isOracleConfigured).
-        run: npm run build
+        # Aucune adresse NEXT_PUBLIC_* n'est définie en CI : config/contracts.ts est conçu pour
+        # basculer dans un état « non configuré » plutôt que planter, donc le build doit réussir
+        # sans elles.
+        run: pnpm run build

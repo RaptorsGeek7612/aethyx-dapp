@@ -1,0 +1,9 @@
+# Le workspace pnpm hisse un node_modules à la racine, en plus de ceux des paquets.
+node_modules/
+
+# Fichiers d'environnement : jamais versionnés, ils contiennent des clés.
+.env
+.env.local
+
+# Réglages d'éditeur, propres à chaque poste.
+.vscode/
