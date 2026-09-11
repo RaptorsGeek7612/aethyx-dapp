@@ -127,14 +127,26 @@ du déploiement Sepolia courant.
 npx hardhat run scripts/deploy-real-estate-market.ts --network sepolia
 ```
 
-Déploie un marché immobilier unique — un `RealEstateAdapter` et son token wrappé — sous
-l'identifiant `REAL_ESTATE_PARIS_01_V3`, avec un blocage de 30 jours, en réutilisant le
-sous-jacent ERC-3643 que détient déjà le marché antérieur. `VaultManager.registerAsset` revert sur
-un identifiant déjà connu et il n'existe aucun moyen de repointer un identifiant existant vers un
-nouvel adaptateur : tout nouveau marché doit donc porter un identifiant neuf, que le frontend doit
-retrouver dans `frontend/src/config/assets.ts`. Le script est idempotent — relancé après un succès,
-il signale que l'identifiant est déjà enregistré et ne fait rien. Le résultat est écrit dans
-`ignition/deployments/chain-<id>/real_estate_market.json`.
+Déploie un marché immobilier unique — un `RealEstateAdapter` et son token wrappé — avec un blocage
+de 30 jours, en réutilisant le sous-jacent ERC-3643 que détient déjà le marché précédent.
+
+`VaultManager.registerAsset` revert sur un identifiant déjà connu, et il n'existe aucun moyen de
+repointer un identifiant existant vers un nouvel adaptateur : **chaque redéploiement exige donc un
+identifiant neuf**. La constante `VERSION` en tête du script porte ce numéro, et
+`REAL_ESTATE_LABEL` dans `frontend/src/config/assets.ts` doit lui correspondre — le frontend
+dérive l'`assetId` de cette chaîne, les deux ne doivent jamais diverger.
+
+L'ordre compte : déployer d'abord, basculer le label du frontend ensuite. L'inverse laisse
+l'interface pointer sur un marché inexistant, qui s'affiche alors « not registered yet ».
+
+Le script est idempotent — relancé après un succès, il signale que l'identifiant est déjà
+enregistré et ne fait rien. Avant d'écrire son résultat, il relit l'adaptateur déployé pour
+vérifier que `lockupPeriod` vaut bien la durée demandée et que `lockedAmountNow()` répond : cette
+seconde fonction n'existe que sur l'adaptateur à échéancier global, si bien qu'un artefact périmé
+échoue ici plutôt que de mettre en ligne un blocage contournable (voir [`AUDIT.md`](AUDIT.md),
+constat n°1). Le résultat est fusionné dans
+`ignition/deployments/chain-<id>/real_estate_market.json`, qui conserve ainsi chaque génération du
+marché.
 
 ### Fraîcheur des prix
 
