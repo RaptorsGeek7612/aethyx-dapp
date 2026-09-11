@@ -3,25 +3,34 @@ import { sepolia } from "viem/chains";
 
 /**
  * Sepolia endpoint used *only* for eth_getLogs. It is deliberately not the one wagmi's contract
- * reads go through, because no free endpoint measured for this app does both jobs:
+ * reads go through, because no endpoint measured for this app does both jobs.
  *
- * | endpoint   | 75 batched reads in one POST | getLogs over the full history |
- * |------------|------------------------------|-------------------------------|
- * | publicnode | 200, 75 replies, 163 ms      | caps at 50k blocks, and **silently returns []** past ~50k |
- * | tenderly   | 429, counts each batched call| 6 events, 177 ms, whole range in one call |
+ * Measured over this app's real history (block 11573900 to head, ~105k blocks) and its real
+ * regime — six getLogsChunked queries per 30s refresh: Deposited and Redeemed on VaultManager,
+ * plus PriceUpdated on both price sources for the two oracle-priced assets:
  *
- * publicnode prunes to roughly the last 50,000 blocks (~7 days): `eth_getCode` at an older block
- * answers "state ... is pruned", and a log query reaching further back comes back as an empty
- * array rather than an error — indistinguishable from "this wallet has no activity", which is
- * exactly how the deployed Activity panel came to show nothing while the deposits it was missing
- * sat 92,000 blocks back. Tenderly's public gateway returns those same six deposits in a single
- * unchunked call, with permissive CORS and a working preflight, but throttles a burst — which is
- * fine here, because the history hooks make a handful of calls, not seventy-five.
+ * | endpoint          | getLogs range cap | requests/cycle | refused | result                   |
+ * |-------------------|-------------------|----------------|---------|--------------------------|
+ * | tenderly (public) | none reached      | 6              | 0%      | 32 events, stable        |
+ * | infura (free key) | 10,000            | 66             | 20.7%   | 24-30 events, unstable   |
+ * | alchemy (free key)| 10                | ~10,500        | -       | unusable                 |
+ * | publicnode        | 50,000            | -              | -       | silently [] past ~50k    |
  *
- * Override with NEXT_PUBLIC_SEPOLIA_LOGS_RPC_URL. A keyed archive endpoint (Alchemy's or
- * Infura's free tier) is the durable answer; these public defaults are what works without an
- * account. Whatever you point this at, check it against the app's real block range — a lone curl
- * over a recent range is exactly the test that missed this.
+ * The keyed free tiers are worse than the unkeyed public gateway, not better — the opposite of
+ * what this file and .env.local.example previously claimed. Alchemy's free plan caps eth_getLogs
+ * at a 10-block range (it says so in its own error message), and Infura's 10,000-block cap turns
+ * each query into 11 requests, at which point its rate limiter refuses one in five. A refused
+ * chunk is a dropped event: the per-cycle counts above vary because the data went missing, which
+ * is the same silent loss this file exists to prevent, arriving by a different route.
+ *
+ * "Archive" is also the wrong word for what this app needs. Tenderly and Alchemy's free tier both
+ * prune *state* — eth_getCode at the deployment block returns empty on both — yet Tenderly serves
+ * the full log history in one call. How deep an endpoint indexes *logs* is a separate guarantee
+ * from whether it keeps historical state, and only the former matters here.
+ *
+ * Override with NEXT_PUBLIC_SEPOLIA_LOGS_RPC_URL. Test a candidate over the app's *full* block
+ * range and at its sustained request rate: a recent-range curl is the check that missed
+ * publicnode's pruning, and a single full-range curl is the check that would have cleared Infura.
  */
 const LOGS_RPC_URL = process.env.NEXT_PUBLIC_SEPOLIA_LOGS_RPC_URL || "https://sepolia.gateway.tenderly.co";
 

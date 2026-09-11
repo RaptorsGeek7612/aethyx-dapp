@@ -10,11 +10,14 @@ export async function boundedFromBlock(publicClient: PublicClient): Promise<bigi
 }
 
 // Fallback window sizes, tried largest first (see getLogsChunked). Measured caps, not guesses:
-// publicnode answers a wider range with "exceed maximum block range: 50000", thirdweb's public
-// endpoint allows 1000, and 1rpc.io/sepolia allows 50. Starting at 45k keeps a ~100k-block
-// history to three requests against the endpoint this app actually defaults to, where a flat 400
-// would have taken 250 — which is what turned a rate limit into an unloadable Activity panel.
-const CHUNK_SIZES = [45_000n, 900n, 45n];
+// publicnode answers a wider range with "exceed maximum block range: 50000", Infura's free tier
+// with "range 105297 exceeds limit of 10000", thirdweb's public endpoint allows 1000, and
+// 1rpc.io/sepolia allows 50. Starting at 45k keeps a ~100k-block history to three requests
+// against the endpoint this app actually defaults to, where a flat 400 would have taken 250 —
+// which is what turned a rate limit into an unloadable Activity panel. The 9k rung covers the
+// 10,000-cap family, which is the most common one; it sits below that cap rather than exactly on
+// it so an endpoint counting the range inclusively still accepts it.
+const CHUNK_SIZES = [45_000n, 9_000n, 900n, 45n];
 // Parallel in-flight chunk requests: enough to keep the fallback's wall-clock time reasonable,
 // low enough not to look like a burst to the rate limiter that likely caused the fallback.
 const CONCURRENCY = 3;
