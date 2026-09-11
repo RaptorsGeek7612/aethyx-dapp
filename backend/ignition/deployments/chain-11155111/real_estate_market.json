@@ -1,0 +1,9 @@
+{
+  "REAL_ESTATE_PARIS_01_V3": {
+    "assetId": "0x47e88f9204df82a794566ce5ec30804d2e5421c0418fc58bff9d554a29ab1cb7",
+    "adapter": "0x36b88A2b79D49bCd870945350e89a133624BC69B",
+    "wrappedToken": "0x0B19296cbC941F0695fe20278716A0c7DdD3595b",
+    "underlying": "0x49CEfD290FcdCDb951E68C68cbae7400551aebf9",
+    "lockupDays": 30
+  }
+}
