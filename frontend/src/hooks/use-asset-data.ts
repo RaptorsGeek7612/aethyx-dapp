@@ -19,6 +19,12 @@ export interface AssetOnChainData extends AssetStaticData {
   maturedAmount: bigint | null;
   /** Real estate only: when the next tranche matures; 0n when nothing of theirs is locked. */
   nextUnlockAt: bigint | null;
+  /**
+   * Real estate only: one entry per deposit still on the books, each with its own maturity.
+   * Deposits never merge — a later one gets its own entry rather than extending an earlier
+   * one — so this is the list the UI shows instead of a single accumulated total.
+   */
+  lockSchedule: readonly { amount: bigint; unlockAt: bigint }[] | null;
 }
 
 /** Adds the connected wallet's balances/allowances/lock state on top of useAssetStaticData. */
@@ -59,7 +65,7 @@ export function useAssetData(asset: AssetDefinition) {
         functionName: "allowance",
         args: [account ?? ZERO_ADDRESS, VAULT_MANAGER_ADDRESS as Address],
       },
-      // The three below revert harmlessly for non-real-estate adapters (they don't have these
+      // The four below revert harmlessly for non-real-estate adapters (they don't have these
       // functions) — allowFailure means that just shows up as failed entries, not a broken batch.
       {
         address: staticData.adapter,
@@ -79,6 +85,12 @@ export function useAssetData(asset: AssetDefinition) {
         functionName: "nextUnlockAt",
         args: [account ?? ZERO_ADDRESS],
       },
+      {
+        address: staticData.adapter,
+        abi: realEstateAdapterAbi,
+        functionName: "lockSchedule",
+        args: [account ?? ZERO_ADDRESS],
+      },
     ],
     query: { enabled: canReadUserData },
   });
@@ -92,6 +104,10 @@ export function useAssetData(asset: AssetDefinition) {
     lockedAmount: asset.kind === "real-estate" ? ((userData?.[4]?.result as bigint | undefined) ?? null) : null,
     maturedAmount: asset.kind === "real-estate" ? ((userData?.[5]?.result as bigint | undefined) ?? null) : null,
     nextUnlockAt: asset.kind === "real-estate" ? ((userData?.[6]?.result as bigint | undefined) ?? null) : null,
+    lockSchedule:
+      asset.kind === "real-estate"
+        ? ((userData?.[7]?.result as readonly { amount: bigint; unlockAt: bigint }[] | undefined) ?? null)
+        : null,
   };
 
   return {

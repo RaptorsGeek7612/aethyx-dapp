@@ -33,6 +33,7 @@ export function ReserveValueReporter({
     lockedAmount: null,
     maturedAmount: null,
     nextUnlockAt: null,
+    lockSchedule: null,
   };
   const { valueEur } = computeValuation(asset, data, price);
 

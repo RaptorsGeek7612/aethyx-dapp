@@ -232,13 +232,7 @@ export function AssetActionForm({ asset }: { asset: AssetDefinition }) {
                     {formatAmount(data.lockedAmount, CANONICAL_DECIMALS)} {data.wrappedSymbol}
                   </span>
                 </div>
-                {data.nextUnlockAt !== null && data.nextUnlockAt > nowSeconds && (
-                  <p className="pt-0.5 opacity-80">
-                    Next tranche frees up in {formatCountdown(data.nextUnlockAt, nowSeconds)} (
-                    {new Date(Number(data.nextUnlockAt) * 1000).toLocaleString()}). Each deposit clears its own lock-up
-                    — a later one never postpones an earlier one.
-                  </p>
-                )}
+                <LockSchedule schedule={data.lockSchedule} symbol={data.wrappedSymbol} nowSeconds={nowSeconds} />
               </div>
             )}
 
@@ -276,6 +270,45 @@ export function AssetActionForm({ asset }: { asset: AssetDefinition }) {
         </Tabs>
       )}
     </>
+  );
+}
+
+/**
+ * One row per deposit still on the books, each with its own countdown — never a single merged
+ * total. Deposits don't accumulate into one schedule on-chain (RealEstateAdapter pushes a fresh
+ * Lock per deposit and sweeps them front-to-back), so showing one aggregated unlock date would
+ * misrepresent a position built from several deposits: the earliest tranche frees up on its own
+ * regardless of anything deposited later.
+ */
+function LockSchedule({
+  schedule,
+  symbol,
+  nowSeconds,
+}: {
+  schedule: readonly { amount: bigint; unlockAt: bigint }[] | null;
+  symbol: string;
+  nowSeconds: bigint;
+}) {
+  const pending = (schedule ?? []).filter((tranche) => tranche.unlockAt > nowSeconds);
+  if (pending.length === 0) return null;
+
+  return (
+    <div className="space-y-1 border-t border-primary/20 pt-1.5">
+      <p className="opacity-80">
+        {pending.length === 1 ? "1 deposit still locked" : `${pending.length} deposits still locked`}, each on its own
+        schedule:
+      </p>
+      {pending.map((tranche, index) => (
+        <div key={`${tranche.unlockAt}-${index}`} className="flex justify-between gap-3 opacity-90">
+          <span className="tabular-nums">
+            {formatAmount(tranche.amount, CANONICAL_DECIMALS)} {symbol}
+          </span>
+          <span className="shrink-0 tabular-nums" title={new Date(Number(tranche.unlockAt) * 1000).toLocaleString()}>
+            frees up in {formatCountdown(tranche.unlockAt, nowSeconds)}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 
