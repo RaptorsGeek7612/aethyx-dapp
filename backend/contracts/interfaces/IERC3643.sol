@@ -1,36 +1,69 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.35;
 
-/// @notice Minimal interface for interacting with an ERC-3643 (T-REX) permissioned token.
-/// @dev Covers only the ERC-20 surface plus the compliance checks that AssetAdapter
-///      implementations need to safely move tokens in and out of the vault. Issuer-only
-///      operations (mint, forcedTransfer, freeze, agent management) are intentionally
-///      excluded: this codebase only ever acts as a holder of the token, never as its issuer.
+/// @notice Interface minimale pour interagir avec un token permissionné ERC-3643 (T-REX).
+/// @dev Ne couvre que la surface ERC-20 et les vérifications de conformité dont les
+///      implémentations d'AssetAdapter ont besoin pour faire entrer et sortir les tokens du
+///      coffre en toute sécurité. Les opérations réservées à l'émetteur (mint, forcedTransfer,
+///      gel, gestion des agents) sont délibérément exclues : ce code n'agit jamais qu'en tant
+///      que détenteur du token, jamais en tant qu'émetteur.
 interface IERC3643 {
-    /// @notice True if `userAddress` holds a verified on-chain identity recognized by this
-    ///         token's Identity Registry. A prerequisite to holding or receiving the token.
-    /// @dev The AssetAdapter contract's own address must satisfy this check — arranged
-    ///      out-of-band with the token issuer — before any deposit can ever succeed.
-
+    /// @notice Vrai si `userAddress` possède une identité on-chain vérifiée, reconnue par
+    ///         l'Identity Registry de ce token. C'est un prérequis pour détenir ou recevoir
+    ///         le token.
+    /// @dev L'adresse du contrat AssetAdapter lui-même doit satisfaire cette vérification —
+    ///      arrangement pris hors chaîne avec l'émetteur du token — avant qu'un dépôt puisse
+    ///      aboutir.
+    /// @param userAddress Adresse dont on vérifie l'identité.
+    /// @return Vrai si l'identité est vérifiée.
     function isVerified(address userAddress) external view returns (bool);
 
+    /// @notice Nombre de décimales du token.
+    /// @return Décimales déclarées par le token.
     function decimals() external view returns (uint8);
 
+    /// @notice Solde de `account`.
+    /// @param account Adresse interrogée.
+    /// @return Solde, dans les décimales du token.
     function balanceOf(address account) external view returns (uint256);
 
+    /// @notice Offre totale en circulation.
+    /// @return Offre totale, dans les décimales du token.
     function totalSupply() external view returns (uint256);
 
+    /// @notice Montant que `spender` est autorisé à dépenser pour le compte de `owner`.
+    /// @param owner Propriétaire des tokens.
+    /// @param spender Adresse autorisée à dépenser.
+    /// @return Montant restant autorisé.
     function allowance(address owner, address spender) external view returns (uint256);
 
+    /// @notice Transfère `amount` tokens de l'appelant vers `to`.
+    /// @param to Destinataire.
+    /// @param amount Quantité transférée.
+    /// @return Vrai si le transfert a réussi.
     function transfer(address to, uint256 amount) external returns (bool);
 
+    /// @notice Transfère `amount` tokens de `from` vers `to`, en consommant l'allowance.
+    /// @param from Adresse débitée.
+    /// @param to Destinataire.
+    /// @param amount Quantité transférée.
+    /// @return Vrai si le transfert a réussi.
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
 
-    /// @notice Pre-flight check: would a transfer of `amount` from `from` to `to` currently
-    ///         pass this token's identity and compliance rules?
-    /// @dev Adapters must call this before attempting transferFrom, since a failed compliance
-    ///      check reverts with no useful reason string on most T-REX deployments.
+    /// @notice Vérification préalable : un transfert de `amount` de `from` vers `to`
+    ///         passerait-il actuellement les règles d'identité et de conformité de ce token ?
+    /// @dev Les adaptateurs doivent l'appeler avant toute tentative de transferFrom : sur la
+    ///      plupart des déploiements T-REX, un échec de conformité revert sans message
+    ///      exploitable.
+    /// @param from Adresse qui serait débitée.
+    /// @param to Destinataire envisagé.
+    /// @param amount Quantité envisagée.
+    /// @return Vrai si le transfert passerait les règles de conformité.
     function canTransfer(address from, address to, uint256 amount) external view returns (bool);
 
+    /// @notice Autorise `spender` à dépenser `amount` tokens de l'appelant.
+    /// @param spender Adresse autorisée.
+    /// @param amount Montant autorisé.
+    /// @return Vrai si l'autorisation a été enregistrée.
     function approve(address spender, uint256 amount) external returns (bool);
 }

@@ -6,21 +6,38 @@ import { VaultManager } from "./VaultManager.sol";
 import { GLDToken } from "./GLDToken.sol";
 import { SilverAdapter } from "./SilverAdapter.sol";
 
-/// @notice Deploys a GLDToken-shaped token + SilverAdapter pair for a silver market and
-///         registers it into VaultManager in a single transaction.
-/// @dev See GoldAssetFactory's natspec for why this is a separate contract rather than one
-///      factory handling every adapter type.
+/// @notice Déploie un couple token de forme GLDToken + SilverAdapter pour un marché argent et
+///         l'enregistre dans VaultManager en une seule transaction.
+/// @dev Voir la natspec de GoldAssetFactory pour la raison d'un contrat distinct plutôt que
+///      d'une fabrique unique prenant en charge tous les types d'adaptateurs.
 contract SilverAssetFactory is AccessManaged {
+    /// @notice VaultManager dans lequel les actifs déployés sont enregistrés.
     VaultManager public immutable vaultManager;
 
+    /// @notice Émis lorsqu'un marché argent a été déployé et enregistré.
+    /// @param assetId Identifiant du nouvel actif.
+    /// @param adapter Adaptateur déployé.
+    /// @param wrappedToken Token wrappé déployé.
     event SilverAssetDeployed(bytes32 indexed assetId, address adapter, address wrappedToken);
 
+    /// @param accessManager_ Adresse de l'AccessManager du protocole.
+    /// @param vaultManager_ VaultManager dans lequel enregistrer les actifs déployés.
     constructor(address accessManager_, address vaultManager_) AccessManaged(accessManager_) {
         vaultManager = VaultManager(vaultManager_);
     }
 
-    /// @dev Requires two one-time, protocol-wide grants already in place in AccessManager:
-    ///      MINTER_ROLE for `vaultManager` and FACTORY_ROLE for this contract.
+    /// @notice Déploie et enregistre un marché argent complet en une transaction.
+    /// @dev Suppose déjà en place deux attributions uniques à l'échelle du protocole dans
+    ///      AccessManager : MINTER_ROLE pour `vaultManager` et FACTORY_ROLE pour ce contrat.
+    /// @param assetId Identifiant à attribuer au nouvel actif.
+    /// @param name Nom du token wrappé.
+    /// @param symbol Symbole du token wrappé.
+    /// @param underlying Token argent ERC-3643 sous-jacent.
+    /// @param minAmount Montant minimal accepté, dans les décimales du sous-jacent.
+    /// @param depositFeeBps Frais de dépôt, en points de base.
+    /// @param redeemFeeBps Frais de rachat, en points de base.
+    /// @return adapter Adaptateur déployé.
+    /// @return wrappedToken Token wrappé déployé.
     function deploySilverAsset(
         bytes32 assetId,
         string calldata name,

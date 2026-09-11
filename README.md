@@ -1,109 +1,131 @@
 # Invest'Or Gateway
 
-An ERC-3643 → ERC-20 wrap protocol: lock a permissioned, compliance-gated real-world asset
-(RWA) token and mint a freely-transferable ERC-20 against it 1:1 (minus a configurable fee),
-one-for-one redeemable back. Gold, silver and tokenized real estate ship as the first three
-asset classes.
+Un protocole d'enveloppement ERC-3643 → ERC-20 : on verrouille un token d'actif du monde réel
+(RWA) permissionné et soumis à conformité, et on émet contre lui un ERC-20 librement
+transférable, à parité 1:1 (moins des frais configurables), rachetable à l'identique. L'or,
+l'argent et l'immobilier tokenisé constituent les trois premières classes d'actifs.
 
-- **`backend/`** — Solidity contracts, tests, and Hardhat 3 Ignition deployment modules.
-- **`frontend/`** — Next.js dApp for wrapping/redeeming and viewing reserve/oracle data.
+- **`backend/`** — contrats Solidity, tests et modules de déploiement Hardhat 3 Ignition.
+- **`frontend/`** — dApp Next.js pour envelopper, racheter et consulter les données de réserve
+  et d'oracle.
 
-## Why wrap ERC-3643 tokens?
+## Pourquoi envelopper des tokens ERC-3643 ?
 
-[ERC-3643](https://eips.ethereum.org/EIPS/eip-3643) tokens (the standard used for regulated
-RWA issuance) carry transfer restrictions — only whitelisted, compliance-checked addresses can
-hold or move them. That makes them hard to use in ordinary DeFi. Invest'Or Gateway locks the
-ERC-3643 token behind an adapter that *is* whitelisted, and mints a plain ERC-20 against it
-that anyone can hold and trade freely, while the underlying collateral stays fully backed and
-redeemable 1:1 by the original holder.
+Les tokens [ERC-3643](https://eips.ethereum.org/EIPS/eip-3643) — le standard employé pour
+l'émission de RWA régulés — portent des restrictions de transfert : seules des adresses
+inscrites sur liste blanche et contrôlées en conformité peuvent les détenir ou les déplacer.
+Cela les rend difficiles à utiliser dans la DeFi ordinaire. Invest'Or Gateway verrouille le
+token ERC-3643 derrière un adaptateur qui, lui, *est* inscrit sur liste blanche, et émet contre
+lui un ERC-20 ordinaire que n'importe qui peut détenir et échanger librement — le collatéral
+sous-jacent restant intégralement adossé et rachetable 1:1 par son détenteur d'origine.
 
 ## Architecture
 
 ```
                     ┌────────────────────┐
-   user ──────────► │  InvestOrGateway    │  stable entry point, never custodies funds
+ utilisateur ─────► │  InvestOrGateway    │  point d'entrée stable, ne détient jamais de fonds
                     └─────────┬───────────┘
                               │ depositFor / redeemFor (ROUTER_ROLE)
                     ┌─────────▼───────────┐        ┌──────────────┐
-                    │    VaultManager      │◄──────►│   Treasury   │  fee revenue
-                    │  registry + fees +   │        └──────────────┘
-                    │  mint/burn orchestr. │
+                    │    VaultManager      │◄──────►│   Treasury   │  produit des frais
+                    │  registre + frais +  │        └──────────────┘
+                    │  émission/destruction│
                     └──┬────────────────┬──┘
                        │                │
               ┌────────▼───────┐  ┌─────▼──────────┐
-              │  AssetAdapter   │  │  Wrapped ERC-20 │  one per asset (GLDToken, ...)
+              │  AssetAdapter   │  │ ERC-20 wrappé   │  un par actif (GLDToken, ...)
               │ (Gold/Silver/   │  └─────────────────┘
               │  RealEstate)    │
               └────────┬────────┘
-                       │ custodies
+                       │ prend en garde
               ┌────────▼────────┐
-              │ ERC-3643 token   │  the real, compliance-gated RWA token
+              │ token ERC-3643   │  le vrai token RWA soumis à conformité
               └─────────────────┘
 
    ┌────────────────┐        ┌───────────────────────────────┐
-   │  OracleManager  │◄───────│ Gold/Silver/RealEstateAsset-   │  deploy adapter + wrapped
-   │  median price,  │        │ Factory                        │  token together, register
-   │  staleness +    │        └───────────────────────────────┘  with VaultManager
-   │  deviation gate │
+   │  OracleManager  │◄───────│ Gold/Silver/RealEstateAsset-   │  déploient adaptateur + token
+   │  prix médian,   │        │ Factory                        │  wrappé ensemble, puis les
+   │  filtres de     │        └───────────────────────────────┘  enregistrent auprès de
+   │  péremption et  │                                           VaultManager
+   │  de dispersion  │
    └────────▲────────┘
             │ addPriceSource
    ┌────────┴────────┐
-   │ ManualPriceSource │  × N per asset (independent feeds)
+   │ ManualPriceSource │  × N par actif (flux indépendants)
    └───────────────────┘
 
-   AccessManager — single AccessControl registry every contract above checks roles against
+   AccessManager — registre AccessControl unique où tous les contrats ci-dessus vérifient
+   leurs rôles
 ```
 
-**Core contracts** (`backend/contracts/`)
+**Contrats principaux** (`backend/contracts/`)
 
-| Contract | Role |
+| Contrat | Rôle |
 |---|---|
-| `AccessManager` | Central `AccessControl` registry — every other contract checks roles here instead of managing its own. |
-| `InvestOrGateway` | Single user-facing entry point (`deposit`/`redeem`). Holds no funds; forwards `msg.sender` straight through to `VaultManager`. |
-| `VaultManager` | Orchestrator. Registers asset adapters, enforces fees, mints/burns wrapped tokens. Invariant: wrapped supply always equals value locked. |
-| `AssetAdapter` (+ `GoldAdapter`, `SilverAdapter`, `RealEstateAdapter`) | Custodies one ERC-3643 asset, runs compliance pre-checks, normalizes decimals to 18. |
-| `*AssetFactory` (Gold/Silver/RealEstate) | Deploys an adapter + wrapped ERC-20 pair together and registers them with `VaultManager`. Split into one factory per asset class — a single factory embedding every adapter's bytecode exceeded the EIP-170 contract size limit. |
-| `OracleManager` | Aggregates multiple price sources per asset into a manipulation-resistant median; excludes stale or divergent sources instead of trusting any single feed. |
-| `ManualPriceSource` | Admin-pushable price feed implementing `IPriceSource` — a secondary source and a way to inject hostile test prices. |
-| `ChainlinkPriceSource` | `IPriceSource` wrapper around a real Chainlink `AggregatorV3Interface` feed — rejects negative/zero prices, incomplete or stale rounds, normalizes decimals to 18. |
-| `Treasury` | Collects protocol fee revenue. |
+| `AccessManager` | Registre `AccessControl` central — tous les autres contrats y vérifient leurs rôles au lieu de gérer les leurs. |
+| `InvestOrGateway` | Point d'entrée unique côté utilisateur (`deposit`/`redeem`). Ne détient aucun fonds ; transmet `msg.sender` tel quel à `VaultManager`. |
+| `VaultManager` | Chef d'orchestre. Enregistre les adaptateurs d'actifs, applique les frais, émet et brûle les tokens wrappés. Invariant : l'offre wrappée égale toujours la valeur verrouillée. |
+| `AssetAdapter` (+ `GoldAdapter`, `SilverAdapter`, `RealEstateAdapter`) | Prend en garde un actif ERC-3643, exécute les contrôles de conformité préalables, normalise les décimales à 18. |
+| `*AssetFactory` (Gold/Silver/RealEstate) | Déploie ensemble un couple adaptateur + ERC-20 wrappé et l'enregistre auprès de `VaultManager`. Découpé en une fabrique par classe d'actif : une fabrique unique embarquant le bytecode de tous les adaptateurs dépassait la limite de taille EIP-170. |
+| `OracleManager` | Agrège plusieurs sources de prix par actif en une médiane résistante à la manipulation ; exclut les sources périmées ou divergentes au lieu de faire confiance à un flux unique. |
+| `ManualPriceSource` | Flux de prix alimenté par un administrateur, implémentant `IPriceSource` — source secondaire et moyen d'injecter des prix hostiles en test. |
+| `ChainlinkPriceSource` | Enveloppe `IPriceSource` autour d'un vrai flux Chainlink `AggregatorV3Interface` — rejette les prix nuls ou négatifs, les rounds incomplets ou périmés, normalise les décimales à 18. |
+| `Treasury` | Collecte le produit des frais de protocole. |
+
+### Note sur l'immobilier : la durée de blocage appartient au contrat
+
+`RealEstateAdapter` impose une durée de détention minimale avant rachat, parce que le règlement
+d'une opération immobilière prend un temps réel. Cette durée, `lockupPeriod`, est **immuable** :
+elle est fixée une fois pour toutes au déploiement du marché, et n'est jamais un paramètre du
+dépôt. C'est ainsi qu'un protocole DeFi exprime normalement une période de détention — une
+propriété du contrat dans lequel on dépose. L'interface la lit sur l'adaptateur et l'affiche ;
+elle ne la propose pas.
+
+Chaque dépôt arrive à échéance selon son propre calendrier : un dépôt ultérieur ne repousse
+jamais un dépôt antérieur, et le rachat est plafonné à ce qui est arrivé à échéance plutôt que
+bloqué en tout ou rien.
 
 ## Backend — Hardhat 3
 
-```
+```shell
 cd backend
 npm install
 npx hardhat compile
-npx hardhat test              # Solidity + TypeScript tests
+npx hardhat test              # tests Solidity + TypeScript
 ```
 
-### Deploy locally
+### Déploiement local
 
 ```shell
-npx hardhat node                                                   # separate terminal
+npx hardhat node                                                   # dans un terminal séparé
 npx hardhat ignition deploy ignition/modules/InvestOrGateway.ts --network localhost
-npx hardhat run scripts/seed-demo-assets.ts --network localhost    # seeds demo Gold/Silver/RealEstate
+npx hardhat run scripts/seed-demo-assets.ts --network localhost    # amorce les actifs de démo
 ```
 
-### Deploy to Sepolia
+### Déploiement sur Sepolia
 
-Set a deployer key (never commit it):
+Enregistre une clé de déploiement (à ne jamais committer) :
 
 ```shell
 npx hardhat keystore set SEPOLIA_PRIVATE_KEY
-# or export SEPOLIA_PRIVATE_KEY / SEPOLIA_RPC_URL as env vars — env vars take precedence
+# ou exporte SEPOLIA_PRIVATE_KEY / SEPOLIA_RPC_URL en variables d'environnement :
+# elles ont priorité sur le keystore
 ```
+
+`configVariable("SEPOLIA_PRIVATE_KEY")` dans `hardhat.config.ts` attend le **nom** d'une entrée
+du keystore, jamais sa valeur. Y coller directement une URL ou une clé casse la configuration et
+fait chercher à Hardhat une entrée portant ce nom.
 
 ```shell
 npx hardhat ignition deploy ignition/modules/InvestOrGateway.ts --network sepolia
 SEED_NETWORK=sepolia npx hardhat run scripts/seed-demo-assets.ts --network sepolia
 ```
 
-Current Sepolia deployment (`backend/ignition/deployments/chain-11155111/`), redeployed to include
-the `ROUTER_ROLE` lock and `OracleManager` hardening — verified `exact_match` on
-[Sourcify](https://sourcify.dev):
+Déploiement Sepolia courant (`backend/ignition/deployments/chain-11155111/`), redéployé pour
+inclure le verrouillage de `ROUTER_ROLE` et le durcissement d'`OracleManager` — vérifié
+`exact_match` sur [Sourcify](https://sourcify.dev) :
 
-| Contract | Address |
+| Contrat | Adresse |
 |---|---|
 | `InvestOrGateway` | `0xb2aE412cE8c8af237Df28cF1fE06599D33F08d59` |
 | `VaultManager` | `0x63C5bACc8C4c8d6b18e1c909fAF4b8C5F6646b53` |
@@ -115,52 +137,66 @@ the `ROUTER_ROLE` lock and `OracleManager` hardening — verified `exact_match` 
 | `RealEstateAssetFactory` | `0x0d759a29967EfC713Bd44682e5A1193848d692cE` |
 | `priceSourcePrimary` (ManualPriceSource) | `0x7656d3AdC0c464a8945417697Ceb78640B8a8933` |
 | `priceSourceSecondary` (ManualPriceSource) | `0x21D2e5dc6D2400c460039F8597c148429d12cd2f` |
-| `ChainlinkPriceSource` (real Sepolia XAU/USD feed) | `0x8e6ded34eeE24F6270F696eeDFfbD479Dd0bdb4A` |
+| `ChainlinkPriceSource` (vrai flux Sepolia XAU/USD) | `0x8e6ded34eeE24F6270F696eeDFfbD479Dd0bdb4A` |
 
-`ChainlinkPriceSource` is registered in `OracleManager` under its own `GOLD_USD_OZ` asset id, not
-under `GOLD` — the live feed reports USD per troy ounce, while `GOLD`'s `ManualPriceSource` entries
-(and the whole frontend) are built around EUR per gram. Wiring them into the same asset id without
-a unit conversion would either revert on deviation or silently mislabel the price. See the backend
-README's Sepolia section for the reasoning.
+Marché immobilier courant, déployé par `scripts/deploy-real-estate-market.ts` sous
+l'identifiant `REAL_ESTATE_PARIS_01_V3` (blocage de 30 jours) — voir
+`ignition/deployments/chain-11155111/real_estate_market.json` :
+
+| Composant | Adresse |
+|---|---|
+| `RealEstateAdapter` | `0x36b88A2b79D49bCd870945350e89a133624BC69B` |
+| Token wrappé (`RLD`) | `0x0B19296cbC941F0695fe20278716A0c7DdD3595b` |
+| Sous-jacent ERC-3643 | `0x49CEfD290FcdCDb951E68C68cbae7400551aebf9` |
+
+`ChainlinkPriceSource` est enregistré dans `OracleManager` sous son propre identifiant d'actif
+`GOLD_USD_OZ`, et non sous `GOLD` : le flux réel publie des dollars par once troy, tandis que les
+entrées `ManualPriceSource` de `GOLD` — et tout le frontend — raisonnent en euros par gramme. Les
+câbler sous le même identifiant sans conversion d'unité ferait soit échouer l'agrégation sur la
+dispersion, soit étiqueter silencieusement un prix faux. Voir la section Sepolia du README backend
+pour le raisonnement.
 
 ## Frontend — Next.js
 
 ```shell
 cd frontend
 npm install
-cp .env.local.example .env.local   # fill in the addresses above + a WalletConnect project id
+cp .env.local.example .env.local   # renseigner les adresses ci-dessus + un project id WalletConnect
 npm run dev                        # http://localhost:3000
 ```
 
-Live at **[investor-gateway.vercel.app](https://investor-gateway.vercel.app)**, pointed at
-the Sepolia deployment above. Deploy your own with the [Vercel CLI](https://vercel.com/docs/cli):
+En ligne sur **[investor-gateway.vercel.app](https://investor-gateway.vercel.app)**, pointé sur le
+déploiement Sepolia ci-dessus. Pour déployer le tien, avec la
+[CLI Vercel](https://vercel.com/docs/cli) :
 
 ```shell
 npm run build
 npx vercel deploy
 ```
 
-## CI
+## Intégration continue
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and pull request:
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) s'exécute à chaque push et chaque pull
+request :
 
-- **backend** — compile, typecheck, `hardhat test` (Solidity + TypeScript), `solhint`, `eslint`,
-  `prettier --check`.
-- **frontend** — `eslint`, `prettier --check`, typecheck, `next build` (with no `.env.local` —
-  the build must succeed unconfigured, see `frontend/src/config/contracts.ts`).
+- **backend** — compilation, typecheck, `hardhat test` (Solidity + TypeScript), `solhint`,
+  `eslint`, `prettier --check`.
+- **frontend** — `eslint`, `prettier --check`, typecheck, `next build` (sans `.env.local` : le
+  build doit réussir non configuré, voir `frontend/src/config/contracts.ts`).
 
-Branch protection is enabled on `master`: both jobs above are required status checks, so a red
-build blocks merging a PR (repo admins can still push directly — that's a GitHub default, not a
-gap in this config). Each package also exposes the same checks locally: see
-[`backend/README.md`](backend/README.md#lint--format) and
+La protection de branche est active sur `master` : les deux jobs ci-dessus sont des status checks
+obligatoires, donc un build rouge bloque la fusion d'une PR (les administrateurs du dépôt peuvent
+toujours pousser directement — c'est un comportement par défaut de GitHub, pas une faille de cette
+configuration). Chaque paquet expose aussi les mêmes vérifications en local : voir
+[`backend/README.md`](backend/README.md#lint--format) et
 [`frontend/README.md`](frontend/README.md#lint-format-typecheck).
 
-## Security notes
+## Notes de sécurité
 
-- `AccessManager`'s `initialAdmin` should be a multisig or timelock in production, never a
-  plain EOA — it can grant and revoke every role, including itself.
-- `ROUTER_ROLE` (held only by `InvestOrGateway`) is fully trusted to only ever forward its own
-  immediate `msg.sender` — never grant it to anything that might pass through an arbitrary
-  third-party address.
-- This is demo/testnet code (`MockERC3643`, `ManualPriceSource`) — not audited, not intended
-  for mainnet funds as-is.
+- L'`initialAdmin` d'`AccessManager` devrait être un multisig ou un timelock en production, jamais
+  un simple EOA : il peut accorder et révoquer tous les rôles, y compris le sien.
+- `ROUTER_ROLE` (détenu par le seul `InvestOrGateway`) est pleinement présumé ne transmettre que
+  son propre `msg.sender` immédiat — ne jamais l'accorder à quoi que ce soit susceptible de
+  transmettre une adresse tierce arbitraire.
+- Ceci est du code de démonstration et de testnet (`MockERC3643`, `ManualPriceSource`) — non
+  audité, non destiné à porter des fonds en mainnet tel quel.

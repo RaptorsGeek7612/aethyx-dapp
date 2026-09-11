@@ -6,22 +6,41 @@ import { VaultManager } from "./VaultManager.sol";
 import { GLDToken } from "./GLDToken.sol";
 import { RealEstateAdapter } from "./RealEstateAdapter.sol";
 
-/// @notice Deploys a GLDToken-shaped token + RealEstateAdapter pair for a real-estate market
-///         and registers it into VaultManager in a single transaction.
-/// @dev See GoldAssetFactory's natspec for why this is a separate contract rather than one
-///      factory handling every adapter type. See RealEstateAdapter's natspec for a limitation
-///      on routing this asset through InvestOrGateway.
+/// @notice Déploie un couple token de forme GLDToken + RealEstateAdapter pour un marché
+///         immobilier et l'enregistre dans VaultManager en une seule transaction.
+/// @dev Voir la natspec de GoldAssetFactory pour la raison d'un contrat distinct plutôt que
+///      d'une fabrique unique prenant en charge tous les types d'adaptateurs. Voir la natspec
+///      de RealEstateAdapter pour le suivi du blocage par déposant lorsque l'appel transite
+///      par InvestOrGateway, et pour la raison pour laquelle la durée de blocage appartient au
+///      marché déployé et non au dépôt.
 contract RealEstateAssetFactory is AccessManaged {
+    /// @notice VaultManager dans lequel les actifs déployés sont enregistrés.
     VaultManager public immutable vaultManager;
 
+    /// @notice Émis lorsqu'un marché immobilier a été déployé et enregistré.
+    /// @param assetId Identifiant du nouvel actif.
+    /// @param adapter Adaptateur déployé.
+    /// @param wrappedToken Token wrappé déployé.
     event RealEstateAssetDeployed(bytes32 indexed assetId, address adapter, address wrappedToken);
 
+    /// @param accessManager_ Adresse de l'AccessManager du protocole.
+    /// @param vaultManager_ VaultManager dans lequel enregistrer les actifs déployés.
     constructor(address accessManager_, address vaultManager_) AccessManaged(accessManager_) {
         vaultManager = VaultManager(vaultManager_);
     }
 
-    /// @dev Requires two one-time, protocol-wide grants already in place in AccessManager:
-    ///      MINTER_ROLE for `vaultManager` and FACTORY_ROLE for this contract.
+    /// @notice Déploie et enregistre un marché immobilier complet en une transaction.
+    /// @dev Suppose déjà en place deux attributions uniques à l'échelle du protocole dans
+    ///      AccessManager : MINTER_ROLE pour `vaultManager` et FACTORY_ROLE pour ce contrat.
+    /// @param assetId Identifiant à attribuer au nouvel actif.
+    /// @param name Nom du token wrappé.
+    /// @param symbol Symbole du token wrappé.
+    /// @param underlying Token immobilier ERC-3643 sous-jacent.
+    /// @param lockupPeriod Durée de détention imposée, en secondes, figée pour ce marché.
+    /// @param depositFeeBps Frais de dépôt, en points de base.
+    /// @param redeemFeeBps Frais de rachat, en points de base.
+    /// @return adapter Adaptateur déployé.
+    /// @return wrappedToken Token wrappé déployé.
     function deployRealEstateAsset(
         bytes32 assetId,
         string calldata name,

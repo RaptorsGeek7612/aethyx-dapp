@@ -7,14 +7,20 @@ import { AccessManaged } from "./access/AccessManaged.sol";
 import { AssetAdapter } from "./AssetAdapter.sol";
 import { IWrappedToken } from "./interfaces/IWrappedToken.sol";
 
-/// @notice Core orchestrator of the wrap: locks an ERC-3643 asset via its AssetAdapter and
-///         mints the matching wrapped ERC-20, or burns the wrapped ERC-20 and releases the
-///         underlying back. Central invariant enforced for every registered asset: total
-///         wrapped supply always equals the total value locked in its adapter, in canonical
-///         18-decimal terms — including whatever Treasury holds as fee revenue. Nothing is
-///         ever minted without a matching deposit, nothing is ever burned without releasing
-///         the matching collateral.
+/// @notice Chef d'orchestre du wrap : verrouille un actif ERC-3643 via son AssetAdapter et
+///         émet l'ERC-20 wrappé correspondant, ou brûle l'ERC-20 wrappé et restitue le
+///         sous-jacent. Invariant central garanti pour chaque actif enregistré : l'offre
+///         totale de token wrappé égale toujours la valeur totale verrouillée dans son
+///         adaptateur, exprimée dans les 18 décimales canoniques — y compris ce que le
+///         Treasury détient au titre des frais. Rien n'est jamais émis sans dépôt
+///         correspondant, rien n'est jamais brûlé sans libération du collatéral correspondant.
 contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
+    /// @notice Configuration d'un actif enregistré.
+    /// @param adapter Adaptateur qui a la garde du sous-jacent.
+    /// @param wrappedToken Token wrappé émis contre cet actif.
+    /// @param depositFeeBps Frais de dépôt, en points de base.
+    /// @param redeemFeeBps Frais de rachat, en points de base.
+    /// @param active Faux si l'actif est gelé : dépôts et rachats sont alors refusés.
     struct AssetConfig {
         AssetAdapter adapter;
         IWrappedToken wrappedToken;
@@ -23,15 +29,39 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         bool active;
     }
 
+    /// @dev Dénominateur des points de base : 10 000 bps = 100 %.
     uint256 private constant BPS_DENOMINATOR = 10_000;
 
+    /// @notice Contrat qui reçoit les frais de protocole.
     address public immutable treasury;
 
+    /// @notice Registre des actifs, indexé par identifiant.
+    /// @dev Volontairement dépourvu d'énumération on-chain : un simple mapping, au prix d'une
+    ///      découverte impossible depuis la chaîne. Les consommateurs (frontend, scripts)
+    ///      tiennent leur propre liste des identifiants qu'ils s'attendent à trouver ici, ou
+    ///      reconstituent l'ensemble depuis les événements AssetRegistered.
     mapping(bytes32 assetId => AssetConfig config) public assets;
 
+    /// @notice Émis lorsqu'une fabrique enregistre un nouveau couple adaptateur / token.
+    /// @param assetId Identifiant du nouvel actif.
+    /// @param adapter Adaptateur enregistré.
+    /// @param wrappedToken Token wrappé enregistré.
     event AssetRegistered(bytes32 indexed assetId, address indexed adapter, address indexed wrappedToken);
+    /// @notice Émis lorsqu'un actif est gelé ou réactivé.
+    /// @param assetId Actif concerné.
+    /// @param active Nouvel état.
     event AssetActiveSet(bytes32 indexed assetId, bool active);
+    /// @notice Émis lorsque les frais d'un actif changent.
+    /// @param assetId Actif concerné.
+    /// @param depositFeeBps Nouveaux frais de dépôt, en points de base.
+    /// @param redeemFeeBps Nouveaux frais de rachat, en points de base.
     event AssetFeesSet(bytes32 indexed assetId, uint16 depositFeeBps, uint16 redeemFeeBps);
+    /// @notice Émis à chaque dépôt réussi.
+    /// @param assetId Actif déposé.
+    /// @param user Déposant réel, jamais l'adresse d'un routeur.
+    /// @param underlyingAmount Quantité de sous-jacent verrouillée, dans ses propres décimales.
+    /// @param mintedAmount Quantité de token wrappé émise au déposant, nette de frais.
+    /// @param feeAmount Part revenue au Treasury.
     event Deposited(
         bytes32 indexed assetId,
         address indexed user,
@@ -39,6 +69,12 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         uint256 mintedAmount,
         uint256 feeAmount
     );
+    /// @notice Émis à chaque rachat réussi.
+    /// @param assetId Actif racheté.
+    /// @param user Racheteur réel, jamais l'adresse d'un routeur.
+    /// @param wrappedAmount Quantité de token wrappé présentée au rachat, frais compris.
+    /// @param underlyingAmount Quantité de sous-jacent restituée.
+    /// @param feeAmount Part revenue au Treasury.
     event Redeemed(
         bytes32 indexed assetId,
         address indexed user,
@@ -47,16 +83,31 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         uint256 feeAmount
     );
 
+    /// @notice L'actif est inconnu ou gelé.
+    /// @param assetId Actif concerné.
     error AssetNotActive(bytes32 assetId);
+    /// @notice Cet identifiant d'actif est déjà pris ; il n'existe aucun moyen de le repointer
+    ///         vers un autre adaptateur.
+    /// @param assetId Identifiant déjà enregistré.
     error AssetAlreadyRegistered(bytes32 assetId);
+    /// @notice Des frais supérieurs à 100 % ont été demandés.
+    /// @param feeBps Valeur refusée, en points de base.
     error FeeTooHigh(uint16 feeBps);
 
+    /// @param accessManager_ Adresse de l'AccessManager du protocole.
+    /// @param treasury_ Contrat destinataire des frais.
     constructor(address accessManager_, address treasury_) AccessManaged(accessManager_) {
         treasury = treasury_;
     }
 
-    /// @notice Registers a new adapter/wrapped-token pair under `assetId`. Only ever called by
-    ///         one of the asset factories, right after it deploys both contracts together.
+    /// @notice Enregistre un nouveau couple adaptateur / token wrappé sous `assetId`. Appelé
+    ///         uniquement par l'une des fabriques d'actifs, juste après qu'elle a déployé les
+    ///         deux contrats ensemble.
+    /// @param assetId Identifiant du nouvel actif.
+    /// @param adapter Adaptateur ayant la garde du sous-jacent.
+    /// @param wrappedToken Token wrappé à émettre contre cet actif.
+    /// @param depositFeeBps Frais de dépôt, en points de base.
+    /// @param redeemFeeBps Frais de rachat, en points de base.
     function registerAsset(
         bytes32 assetId,
         address adapter,
@@ -77,11 +128,19 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         emit AssetRegistered(assetId, adapter, wrappedToken);
     }
 
+    /// @notice Gèle ou réactive un actif. Un actif gelé refuse dépôts et rachats sans que le
+    ///         reste du protocole soit affecté.
+    /// @param assetId Actif concerné.
+    /// @param active Nouvel état souhaité.
     function setAssetActive(bytes32 assetId, bool active) external onlyRole(accessManager.ASSET_MANAGER_ROLE()) {
         assets[assetId].active = active;
         emit AssetActiveSet(assetId, active);
     }
 
+    /// @notice Met à jour les frais d'un actif déjà enregistré.
+    /// @param assetId Actif concerné.
+    /// @param depositFeeBps Nouveaux frais de dépôt, en points de base.
+    /// @param redeemFeeBps Nouveaux frais de rachat, en points de base.
     function setAssetFees(
         bytes32 assetId,
         uint16 depositFeeBps,
@@ -94,17 +153,22 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         emit AssetFeesSet(assetId, depositFeeBps, redeemFeeBps);
     }
 
+    /// @notice Suspend dépôts et rachats sur tous les actifs à la fois.
     function pause() external onlyRole(accessManager.PAUSER_ROLE()) {
         _pause();
     }
 
+    /// @notice Lève la suspension posée par `pause`.
     function unpause() external onlyRole(accessManager.PAUSER_ROLE()) {
         _unpause();
     }
 
-    /// @notice Deposits `amount` (underlying decimals) of the ERC-3643 asset identified by
-    ///         `assetId`, minting the equivalent wrapped ERC-20 (minus the deposit fee) to
-    ///         the caller.
+    /// @notice Dépose `amount` (décimales du sous-jacent) de l'actif ERC-3643 identifié par
+    ///         `assetId`, et émet à l'appelant l'ERC-20 wrappé équivalent, net des frais de
+    ///         dépôt.
+    /// @param assetId Actif déposé.
+    /// @param amount Quantité déposée, dans les décimales du sous-jacent.
+    /// @return mintedAmount Quantité de token wrappé émise à l'appelant.
     function deposit(
         bytes32 assetId,
         uint256 amount
@@ -112,14 +176,19 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         return _deposit(assetId, amount, msg.sender);
     }
 
-    /// @notice Same as deposit, but pulls from and mints to `depositor` instead of msg.sender.
-    /// @dev Restricted to ROUTER_ROLE, held only by InvestOrGateway. This is what lets the
-    ///      Gateway forward a deposit on behalf of its own caller without ever custodying the
-    ///      ERC-3643 token itself: `depositor` must still have approved the asset's adapter
-    ///      directly, exactly as for a direct call to `deposit`. A router is fully trusted to
-    ///      only ever pass through its own immediate msg.sender here, never an arbitrary
-    ///      third-party address — the same trust level already placed in MINTER_ROLE/
-    ///      FACTORY_ROLE holders.
+    /// @notice Identique à `deposit`, mais tire depuis `depositor` et émet vers lui plutôt que
+    ///         vers msg.sender.
+    /// @dev Réservé à ROUTER_ROLE, détenu par le seul InvestOrGateway. C'est ce qui permet au
+    ///      Gateway de relayer un dépôt pour le compte de son propre appelant sans jamais
+    ///      prendre lui-même la garde du token ERC-3643 : `depositor` doit toujours avoir
+    ///      approuvé directement l'adaptateur de l'actif, exactement comme pour un appel
+    ///      direct à `deposit`. Un routeur est pleinement présumé ne transmettre ici que son
+    ///      propre msg.sender immédiat, jamais une adresse tierce arbitraire — le même niveau
+    ///      de confiance que celui déjà accordé aux détenteurs de MINTER_ROLE et FACTORY_ROLE.
+    /// @param assetId Actif déposé.
+    /// @param amount Quantité déposée, dans les décimales du sous-jacent.
+    /// @param depositor Déposant réel, pour le compte de qui le routeur agit.
+    /// @return mintedAmount Quantité de token wrappé émise au déposant.
     function depositFor(
         bytes32 assetId,
         uint256 amount,
@@ -128,9 +197,12 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         return _deposit(assetId, amount, depositor);
     }
 
-    /// @notice Burns `wrappedAmount` of the wrapped ERC-20 for `assetId` from the caller and
-    ///         releases the equivalent underlying ERC-3643 (minus the redeem fee) to them.
-    ///         Requires the caller to have approved this contract for at least `wrappedAmount`.
+    /// @notice Brûle `wrappedAmount` du token wrappé de `assetId` détenu par l'appelant et lui
+    ///         restitue l'ERC-3643 sous-jacent équivalent, net des frais de rachat. Exige que
+    ///         l'appelant ait approuvé ce contrat pour au moins `wrappedAmount`.
+    /// @param assetId Actif racheté.
+    /// @param wrappedAmount Quantité de token wrappé présentée, frais compris.
+    /// @return underlyingAmount Quantité de sous-jacent restituée.
     function redeem(
         bytes32 assetId,
         uint256 wrappedAmount
@@ -138,8 +210,12 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         return _redeem(assetId, wrappedAmount, msg.sender);
     }
 
-    /// @notice Same as redeem, but burns from and releases to `redeemer` instead of
-    ///         msg.sender. Restricted to ROUTER_ROLE — see depositFor's natspec.
+    /// @notice Identique à `redeem`, mais brûle depuis `redeemer` et restitue vers lui plutôt
+    ///         que vers msg.sender. Réservé à ROUTER_ROLE — voir la natspec de `depositFor`.
+    /// @param assetId Actif racheté.
+    /// @param wrappedAmount Quantité de token wrappé présentée, frais compris.
+    /// @param redeemer Racheteur réel, pour le compte de qui le routeur agit.
+    /// @return underlyingAmount Quantité de sous-jacent restituée.
     function redeemFor(
         bytes32 assetId,
         uint256 wrappedAmount,
@@ -148,6 +224,11 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         return _redeem(assetId, wrappedAmount, redeemer);
     }
 
+    /// @notice Logique partagée par `deposit` et `depositFor`.
+    /// @param assetId Actif déposé.
+    /// @param amount Quantité déposée, dans les décimales du sous-jacent.
+    /// @param depositor Déposant réel.
+    /// @return mintedAmount Quantité de token wrappé émise au déposant.
     function _deposit(bytes32 assetId, uint256 amount, address depositor) private returns (uint256 mintedAmount) {
         AssetConfig storage config = assets[assetId];
         if (!config.active) revert AssetNotActive(assetId);
@@ -157,11 +238,19 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         mintedAmount = normalizedAmount - feeAmount;
 
         config.wrappedToken.mint(depositor, mintedAmount);
+        // Les frais sont émis vers le Treasury plutôt que retenus sur le collatéral : l'offre
+        // wrappée totale reste ainsi exactement égale à ce qui est verrouillé dans
+        // l'adaptateur, frais compris, et l'invariant de couverture tient.
         if (feeAmount > 0) config.wrappedToken.mint(treasury, feeAmount);
 
         emit Deposited(assetId, depositor, amount, mintedAmount, feeAmount);
     }
 
+    /// @notice Logique partagée par `redeem` et `redeemFor`.
+    /// @param assetId Actif racheté.
+    /// @param wrappedAmount Quantité de token wrappé présentée, frais compris.
+    /// @param redeemer Racheteur réel.
+    /// @return underlyingAmount Quantité de sous-jacent restituée.
     function _redeem(
         bytes32 assetId,
         uint256 wrappedAmount,
@@ -173,6 +262,9 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         uint256 feeAmount = (wrappedAmount * config.redeemFeeBps) / BPS_DENOMINATOR;
         uint256 netAmount = wrappedAmount - feeAmount;
 
+        // La part de frais est transférée au Treasury et non brûlée : elle reste adossée au
+        // collatéral qui demeure verrouillé dans l'adaptateur. Seule la part nette est brûlée,
+        // et c'est exactement elle qui donne lieu à libération de sous-jacent.
         if (feeAmount > 0) config.wrappedToken.transferFrom(redeemer, treasury, feeAmount);
         config.wrappedToken.burnFrom(redeemer, netAmount);
 
@@ -181,6 +273,9 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         emit Redeemed(assetId, redeemer, wrappedAmount, underlyingAmount, feeAmount);
     }
 
+    /// @notice Refuse tout taux de frais supérieur à 100 %.
+    /// @param depositFeeBps Frais de dépôt proposés, en points de base.
+    /// @param redeemFeeBps Frais de rachat proposés, en points de base.
     function _validateFees(uint16 depositFeeBps, uint16 redeemFeeBps) private pure {
         if (depositFeeBps > BPS_DENOMINATOR) revert FeeTooHigh(depositFeeBps);
         if (redeemFeeBps > BPS_DENOMINATOR) revert FeeTooHigh(redeemFeeBps);

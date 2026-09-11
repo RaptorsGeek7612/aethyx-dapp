@@ -6,26 +6,45 @@ import { VaultManager } from "./VaultManager.sol";
 import { GLDToken } from "./GLDToken.sol";
 import { GoldAdapter } from "./GoldAdapter.sol";
 
-/// @notice Deploys a GLDToken + GoldAdapter pair for a gold market and registers it into
-///         VaultManager in a single transaction, so the two contracts can never end up
-///         mismatched or half-registered.
-/// @dev One factory per adapter type (see SilverAssetFactory, RealEstateAssetFactory) rather
-///      than a single factory embedding every adapter's creation bytecode: bundling three or
-///      more adapter types into one contract pushed it past the EIP-170 24,576-byte
-///      deployed-code limit. Each factory holds the same FACTORY_ROLE — VaultManager only
-///      cares that its caller is a trusted factory, not which one.
+/// @notice Déploie un couple GLDToken + GoldAdapter pour un marché or et l'enregistre dans
+///         VaultManager en une seule transaction, de sorte que les deux contrats ne puissent
+///         jamais se retrouver dépareillés ou à moitié enregistrés.
+/// @dev Une fabrique par type d'adaptateur (voir SilverAssetFactory, RealEstateAssetFactory)
+///      plutôt qu'une fabrique unique embarquant le bytecode de création de tous les
+///      adaptateurs : regrouper trois types d'adaptateurs ou plus dans un seul contrat le
+///      faisait dépasser la limite EIP-170 de 24 576 octets de code déployé. Chaque fabrique
+///      détient le même FACTORY_ROLE — VaultManager se soucie seulement que son appelant soit
+///      une fabrique de confiance, pas de laquelle il s'agit.
 contract GoldAssetFactory is AccessManaged {
+    /// @notice VaultManager dans lequel les actifs déployés sont enregistrés.
     VaultManager public immutable vaultManager;
 
+    /// @notice Émis lorsqu'un marché or a été déployé et enregistré.
+    /// @param assetId Identifiant du nouvel actif.
+    /// @param adapter Adaptateur déployé.
+    /// @param wrappedToken Token wrappé déployé.
     event GoldAssetDeployed(bytes32 indexed assetId, address adapter, address wrappedToken);
 
+    /// @param accessManager_ Adresse de l'AccessManager du protocole.
+    /// @param vaultManager_ VaultManager dans lequel enregistrer les actifs déployés.
     constructor(address accessManager_, address vaultManager_) AccessManaged(accessManager_) {
         vaultManager = VaultManager(vaultManager_);
     }
 
-    /// @dev Requires two one-time, protocol-wide grants already in place in AccessManager:
-    ///      MINTER_ROLE for `vaultManager` (covers every wrapped token, not just this one) and
-    ///      FACTORY_ROLE for this contract. Neither is granted here.
+    /// @notice Déploie et enregistre un marché or complet en une transaction.
+    /// @dev Suppose déjà en place deux attributions uniques à l'échelle du protocole dans
+    ///      AccessManager : MINTER_ROLE pour `vaultManager` (il couvre tous les tokens
+    ///      wrappés, pas seulement celui-ci) et FACTORY_ROLE pour ce contrat. Aucune des deux
+    ///      n'est accordée ici.
+    /// @param assetId Identifiant à attribuer au nouvel actif.
+    /// @param name Nom du token wrappé.
+    /// @param symbol Symbole du token wrappé.
+    /// @param underlying Token or ERC-3643 sous-jacent.
+    /// @param minAmount Montant minimal accepté, dans les décimales du sous-jacent.
+    /// @param depositFeeBps Frais de dépôt, en points de base.
+    /// @param redeemFeeBps Frais de rachat, en points de base.
+    /// @return adapter Adaptateur déployé.
+    /// @return wrappedToken Token wrappé déployé.
     function deployGoldAsset(
         bytes32 assetId,
         string calldata name,

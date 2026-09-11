@@ -28,10 +28,25 @@ contract ChainlinkPriceSource is IPriceSource {
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice L'adresse d'agrégateur fournie est nulle.
     error ZeroAggregator();
+
+    /// @notice Le feed a publié un prix nul ou négatif, ce qui n'a aucun sens pour un actif.
+    /// @param answer Valeur brute renvoyée par l'agrégateur.
     error NonPositiveAnswer(int256 answer);
+
+    /// @notice La réponse provient d'un round antérieur : donnée reportée, potentiellement
+    ///         obsolète.
+    /// @param roundId Round interrogé.
+    /// @param answeredInRound Round dont la réponse provient réellement.
     error IncompleteRound(uint80 roundId, uint80 answeredInRound);
+
+    /// @notice Le round n'a jamais été finalisé : son horodatage n'a pas été écrit.
     error UnsetTimestamp();
+
+    /// @notice Le feed publie dans une base plus fine que les 18 décimales du protocole, que
+    ///         cette source ne saurait réduire sans perte.
+    /// @param feedDecimals Décimales déclarées par le feed.
     error UnsupportedDecimals(uint8 feedDecimals);
 
     /*//////////////////////////////////////////////////////////////
@@ -54,6 +69,8 @@ contract ChainlinkPriceSource is IPriceSource {
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
+    /// @param aggregator_ Proxy d'agrégateur Chainlink à interroger.
+    /// @param description_ Libellé lisible de la source, ex. "Chainlink XAU/USD (Sepolia)".
     constructor(address aggregator_, string memory description_) {
         if (aggregator_ == address(0)) revert ZeroAggregator();
 
@@ -73,7 +90,9 @@ contract ChainlinkPriceSource is IPriceSource {
     /**
      * @notice Retourne le dernier prix publié, normalisé à 18 décimales.
      * @dev Revert dans tous les cas suspects — c'est le comportement attendu par
-     *      `OracleManager`, qui exclut alors la source de l'agrégation.
+     *      `OracleManager`, qui exclut alors la source de l'agrégation. Le paramètre
+     *      `assetId` de l'interface est volontairement ignoré et laissé sans nom : cette
+     *      source enveloppe un feed unique.
      * @return price     Prix en base 18.
      * @return updatedAt Horodatage de la dernière publication, utilisé par le filtre de péremption.
      */
@@ -97,7 +116,12 @@ contract ChainlinkPriceSource is IPriceSource {
                                 INTERNAL
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev Chainlink publie généralement en 8 décimales ; le protocole raisonne en 18.
+    /// @notice Normalise un prix brut du feed vers les 18 décimales du protocole.
+    /// @dev Chainlink publie généralement en 8 décimales ; le protocole raisonne en 18. Le
+    ///      constructeur ayant déjà rejeté tout feed au-delà de 18 décimales, la conversion
+    ///      est toujours une multiplication, jamais une division qui perdrait de la précision.
+    /// @param raw Prix brut, dans les décimales du feed.
+    /// @return Prix équivalent en base 18.
     function _scaleTo18(uint256 raw) internal view returns (uint256) {
         if (feedDecimals == TARGET_DECIMALS) return raw;
         return raw * (10 ** uint256(TARGET_DECIMALS - feedDecimals));
