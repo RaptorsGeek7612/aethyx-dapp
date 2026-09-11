@@ -53,9 +53,13 @@ const [admin] = await ethers.getSigners();
 console.log(`Deploying ${LABEL} as`, admin.address, "on", networkName);
 
 const assetId = ethers.id(LABEL);
-if ((await vaultManager.assets(assetId)).adapter !== ethers.ZeroAddress) {
-  console.log(LABEL, "is already registered — nothing to do");
-  process.exit(0);
+const alreadyRegistered = (await vaultManager.assets(assetId)).adapter !== ethers.ZeroAddress;
+if (alreadyRegistered) {
+  // Not an early exit. Registering the market and whitelisting its adapter are two
+  // transactions, and a run interrupted between them leaves a market that looks deployed and
+  // reverts every deposit with AdapterNotVerified. Falling through re-checks each step
+  // individually, so a second run repairs a partial first one instead of reporting success.
+  console.log(LABEL, "is already registered — checking the rest of the setup");
 }
 
 // --- 1. A factory that emits the current adapter ------------------------------------------------
@@ -120,9 +124,13 @@ if (underlyingAddress === "") {
 }
 
 // --- 3. The market ------------------------------------------------------------------------------
-await (
-  await factory.connect(admin).deployRealEstateAsset(assetId, "Invest'Or Real Estate", "RLD", underlyingAddress, 0n, 0n)
-).wait();
+if (!alreadyRegistered) {
+  await (
+    await factory
+      .connect(admin)
+      .deployRealEstateAsset(assetId, "Invest'Or Real Estate", "RLD", underlyingAddress, 0n, 0n)
+  ).wait();
+}
 
 const config = await vaultManager.assets(assetId);
 console.log(LABEL, "→ adapter", config.adapter, "wrapped", config.wrappedToken);
@@ -131,8 +139,12 @@ console.log(LABEL, "→ adapter", config.adapter, "wrapped", config.wrappedToken
 // step seed-demo-assets.ts performs for a freshly deployed market. setVerified is MockERC3643's
 // own shortcut; against a real issuer's token this is whatever their compliance flow is.
 const underlying = await ethers.getContractAt("MockERC3643", underlyingAddress);
-await (await underlying.setVerified(config.adapter, true)).wait();
-console.log("Adapter whitelisted on", underlyingAddress);
+if (await underlying.isVerified(config.adapter)) {
+  console.log("Adapter already whitelisted on", underlyingAddress);
+} else {
+  await (await underlying.setVerified(config.adapter, true)).wait();
+  console.log("Adapter whitelisted on", underlyingAddress);
+}
 
 // --- 4. Prove what actually landed --------------------------------------------------------------
 //
@@ -147,7 +159,10 @@ for (const sig of retired) {
   if (code.includes(selector)) throw new Error(`deployed adapter still exposes ${sig} — the factory is stale`);
 }
 if ((await adapter.assetId()) !== assetId) throw new Error("deployed adapter reports a different assetId");
-console.log("Verified: no lock-up surface, assetId consistent");
+if (!(await underlying.isVerified(config.adapter))) {
+  throw new Error("adapter is not whitelisted on the underlying — every deposit would revert");
+}
+console.log("Verified: no lock-up surface, assetId consistent, adapter whitelisted");
 
 // Merge rather than overwrite, so the record keeps every generation of this market.
 const outPath = `${deploymentDir}/real_estate_market.json`;

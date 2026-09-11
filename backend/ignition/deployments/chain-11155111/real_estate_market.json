@@ -14,5 +14,13 @@
     "factory": "0xABB4C7D09bD9e7F4a5822b37405c747B13ed71aD",
     "lockupDays": 30,
     "marketWideLockup": true
+  },
+  "REAL_ESTATE_PARIS_01_V5": {
+    "assetId": "0x3bd6116f972a21a849404b90775038d560ac39b819fe24604e19e6b2b1ce570d",
+    "adapter": "0xdAf164bdC29F2a8B5B5209889136312A80b49264",
+    "wrappedToken": "0x3086a2bF496957b7d389721fe431569EE0a4b251",
+    "underlying": "0x49CEfD290FcdCDb951E68C68cbae7400551aebf9",
+    "factory": "0xf669Bd36CF0fC728DeB4086488A221Cd044DF436",
+    "lockup": null
   }
 }
