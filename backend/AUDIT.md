@@ -15,6 +15,7 @@
 | 4 | `getPrice` revert sur horodatage futur, hors `try/catch` | **Faible** | Latent |
 | 5 | Valeur de retour de `transferFrom` ignorée | **Faible** | Non exploitable en l'état |
 | 6 | `registerAsset` ne vérifie pas la cohérence de l'`assetId` | **Faible** | Non exploitable en l'état |
+| 7 | Les fabriques figent le bytecode de leur adaptateur | **Moyenne** | **Actif** — le marché déployé porte l'adaptateur d'origine |
 
 Aucun constat critique. Le constat 1 invalidait une propriété que le protocole annonce ; il a été
 corrigé dans le code après cette revue (voir sa section). **Le marché déployé sur Sepolia porte
@@ -92,9 +93,13 @@ Conséquences :
   par deux tests : l'un vérifie que l'auto-transfert échoue puis réussit après maturité, l'autre
   que le token wrappé reste transférable pendant le blocage.
 
-**Non déployé.** L'adaptateur en place sur Sepolia (`0x36b88A2b…C69B`) reste celui d'avant
-correction. Fermer la faille exige un nouveau déploiement sous un nouvel `assetId`, `registerAsset`
-refusant de repointer un identifiant existant.
+**Non déployé, et pire que prévu.** L'adaptateur en place sur Sepolia (`0x36b88A2b…C69B`) ne porte
+pas seulement la version d'avant correction : le balayage de ses sélecteurs montre qu'il expose
+`lockedUntil(address)` et aucune des fonctions de calendrier. C'est l'adaptateur **d'origine**,
+celui d'avant même le passage à une échéance par dépôt. Voir le constat n°7 pour la cause.
+
+Fermer la faille exige donc de redéployer la fabrique puis un marché neuf sous un nouvel
+`assetId`, `registerAsset` refusant de repointer un identifiant existant.
 
 ---
 
@@ -207,6 +212,53 @@ l'invariant le plus important du protocole.
 
 **Recommandation.** Ajouter `if (AssetAdapter(adapter).assetId() != assetId) revert(...)`. Une
 vérification à l'enregistrement coûte une lecture unique et ferme la porte définitivement.
+
+---
+
+## 7. Les fabriques figent le bytecode de leur adaptateur — **Moyenne**
+
+**Localisation** : `RealEstateAssetFactory.sol`, et par construction `GoldAssetFactory` et
+`SilverAssetFactory`
+
+**Description.** Une fabrique embarque le *bytecode de création* de son adaptateur, figé au moment
+où la fabrique elle-même a été compilée et déployée. Elle est immuable : une fabrique déployée
+avant une modification de l'adaptateur continue d'émettre l'ancienne version indéfiniment, quoi que
+disent les sources locales. Rien dans le code ni dans les scripts ne signalait cet écart.
+
+**Constat sur le déploiement.** La fabrique enregistrée sur Sepolia
+(`0x0d759a29…92cE`) fait 14 395 octets contre 15 800 pour la compilation courante. Un `immutable`
+est écrit sur place et ne change jamais la longueur : un écart de taille signifie un code
+réellement différent.
+
+Conséquence concrète, vérifiée par balayage des sélecteurs du marché déployé aujourd'hui :
+
+```
+présent  lockupPeriod()        présent  lockedUntil(address)
+absent   lockedAmountOf(address)   absent   lockedAmountNow()
+absent   maturedAmountOf(address)  absent   maturedAmountNow()
+absent   nextUnlockAt(address)     absent   nextUnlockAt()
+absent   lockSchedule(address)     absent   lockSchedule()
+```
+
+Le marché `REAL_ESTATE_PARIS_01_V3` ne porte donc ni le calendrier global, ni même l'échéance par
+dépôt : il porte le tout premier adaptateur, celui dont un unique `lockedUntil` par adresse était
+écrasé à chaque dépôt — si bien qu'abonder une position presque échue la reverrouillait
+intégralement. Deux générations de correctifs sont absentes de la chaîne alors qu'elles sont dans
+le dépôt depuis des semaines.
+
+L'interface lisant ces fonctions avec `allowFailure`, leur absence se traduisait par des entrées en
+échec silencieux : le panneau de blocage ne s'affichait tout simplement jamais, sans le moindre
+message d'erreur.
+
+**Recommandation.** Redéployer la fabrique en même temps que tout changement d'adaptateur, et le
+vérifier plutôt que le supposer. Le script `scripts/deploy-real-estate-market.ts` le fait
+désormais : il compare la taille du code de la fabrique enregistrée à celle de la compilation
+courante, en redéploie une au besoin avec son `FACTORY_ROLE`, puis relit l'adaptateur obtenu pour
+confirmer qu'il expose `lockedAmountNow()` avant d'écrire quoi que ce soit.
+
+Penser aussi à révoquer le `FACTORY_ROLE` de la fabrique remplacée : tant qu'elle le détient, un
+`ASSET_MANAGER_ROLE` peut encore enregistrer des marchés adossés à l'ancien adaptateur. Le script
+imprime la commande sans l'exécuter — retirer un privilège en production se décide, ne se subit pas.
 
 ---
 
