@@ -193,6 +193,10 @@ configuration). Chaque paquet expose aussi les mêmes vérifications en local : 
 
 ## Notes de sécurité
 
+Une revue de sécurité interne des contrats est consignée dans
+[`backend/AUDIT.md`](backend/AUDIT.md) : six constats, dont un de sévérité élevée sur le
+contournement du blocage immobilier. À lire avant toute réutilisation de ce code.
+
 - L'`initialAdmin` d'`AccessManager` devrait être un multisig ou un timelock en production, jamais
   un simple EOA : il peut accorder et révoquer tous les rôles, y compris le sien.
 - `ROUTER_ROLE` (détenu par le seul `InvestOrGateway`) est pleinement présumé ne transmettre que

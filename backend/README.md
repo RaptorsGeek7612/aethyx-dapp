@@ -172,6 +172,8 @@ travail futur, pas fait ici.
 
 ## Notes de sécurité
 
+Revue de sécurité complète des contrats : [`AUDIT.md`](AUDIT.md).
+
 - L'`initialAdmin` d'`AccessManager` devrait être un multisig ou un timelock en production, jamais
   un simple EOA : il peut accorder et révoquer tous les rôles, y compris le sien.
 - `ROUTER_ROLE` (détenu par le seul `InvestOrGateway`, puis verrouillé définitivement via
