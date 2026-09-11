@@ -7,6 +7,7 @@ import { parseAbiItem, type Hex } from "viem";
 import { toast } from "sonner";
 import { PRICE_SOURCE_ADDRESSES, isOracleConfigured } from "@/config/contracts";
 import { boundedFromBlock, getLogsChunked } from "@/lib/log-range";
+import { logsClientFor } from "@/lib/logs-client";
 
 const PRICE_UPDATED_EVENT = parseAbiItem(
   "event PriceUpdated(bytes32 indexed assetId, uint256 price, uint256 updatedAt)",
@@ -26,7 +27,8 @@ export interface PricePoint {
  * history. Also raises a toast when the latest reading has moved >5% from ~24h ago.
  */
 export function usePriceHistory(assetId: Hex, pricedByOracle: boolean | undefined, assetTitle: string) {
-  const publicClient = usePublicClient();
+  // See useTransactionHistory: wagmi's Sepolia endpoint cannot serve logs this far back.
+  const publicClient = logsClientFor(usePublicClient());
   const enabled = isOracleConfigured && Boolean(pricedByOracle) && Boolean(publicClient);
   const lastAlertedPrice = useRef<bigint | null>(null);
 

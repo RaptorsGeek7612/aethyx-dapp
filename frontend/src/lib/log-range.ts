@@ -9,12 +9,12 @@ export async function boundedFromBlock(publicClient: PublicClient): Promise<bigi
   return current > LOG_LOOKBACK_BLOCKS ? current - LOG_LOOKBACK_BLOCKS : 0n;
 }
 
-// Only used as a fallback (see getLogsChunked). 400 clears, with margin, the range cap of every
-// endpoint this app can actually run on — thirdweb's public Sepolia endpoint allows 1000. It does
-// NOT rescue a provider whose cap is below it: Alchemy's free tier caps eth_getLogs at 10 blocks,
-// which no practical chunk size makes usable over a multi-thousand-block history, so that tier is
-// ruled out at the RPC-choice level instead (see wagmi.ts and .env.local.example).
-const CHUNK_SIZE = 400n;
+// Fallback window sizes, tried largest first (see getLogsChunked). Measured caps, not guesses:
+// publicnode answers a wider range with "exceed maximum block range: 50000", thirdweb's public
+// endpoint allows 1000, and 1rpc.io/sepolia allows 50. Starting at 45k keeps a ~100k-block
+// history to three requests against the endpoint this app actually defaults to, where a flat 400
+// would have taken 250 — which is what turned a rate limit into an unloadable Activity panel.
+const CHUNK_SIZES = [45_000n, 900n, 45n];
 // Parallel in-flight chunk requests: enough to keep the fallback's wall-clock time reasonable,
 // low enough not to look like a burst to the rate limiter that likely caused the fallback.
 const CONCURRENCY = 3;
@@ -38,14 +38,14 @@ async function fetchLogs<event extends AbiEvent>(
 }
 
 /**
- * getLogs over [fromBlock, toBlock] — tried as a single call first, since every real RPC provider
- * this app has actually been tested against (see wagmi.ts) tolerates the app's full
- * several-thousand-block history window in one request, and that's a fraction of the requests
- * chunking always would have made. Falls back to CHUNK_SIZE-block windows with bounded
- * concurrency only if the single call fails (a provider's own range limit, or a transient error)
- * — this is what makes usePriceHistory/useTransactionHistory's queries resilient to whichever
- * provider ends up configured, without paying the request-volume cost of chunking against
- * providers that never needed it.
+ * getLogs over [fromBlock, toBlock], tried as a single call first: the endpoint lib/logs-client.ts
+ * selects answers this app's entire history — ~100k blocks — in one request, and chunking it
+ * unconditionally would turn that into hundreds. Only if that call fails does this retry in
+ * windows, trying CHUNK_SIZES largest first, so an endpoint with a generous range cap is not
+ * punished with the request volume a stingy one needs. If every window size also fails, the error
+ * is rethrown rather than swallowed into an empty array: "no logs" and "this endpoint cannot see
+ * that far back" look identical to a caller, and telling a depositor they have no activity when
+ * the endpoint simply lost sight of it is the failure this whole path exists to prevent.
  */
 export async function getLogsChunked<const event extends AbiEvent>(
   publicClient: PublicClient,
@@ -55,13 +55,33 @@ export async function getLogsChunked<const event extends AbiEvent>(
 ): Promise<Log<bigint, number, false, event>[]> {
   try {
     return await fetchLogs(publicClient, params, fromBlock, toBlock);
-  } catch {
-    // fall through to chunked retry below
+  } catch (error) {
+    let lastError = error;
+    for (const chunkSize of CHUNK_SIZES) {
+      try {
+        return await fetchInChunks(publicClient, params, fromBlock, toBlock, chunkSize);
+      } catch (chunkError) {
+        lastError = chunkError;
+      }
+    }
+    // Every window size failed: this is a real failure (a dead endpoint, a rate limit that
+    // outlasted the retry) and not a range limit, so let the caller surface it rather than
+    // returning [] — an empty array here is indistinguishable from "no activity", which is the
+    // exact confusion this whole code path exists to avoid.
+    throw lastError;
   }
+}
 
+async function fetchInChunks<const event extends AbiEvent>(
+  publicClient: PublicClient,
+  params: { address: `0x${string}`; event: event; args?: Record<string, unknown> },
+  fromBlock: bigint,
+  toBlock: bigint,
+  chunkSize: bigint,
+): Promise<Log<bigint, number, false, event>[]> {
   const ranges: Array<[bigint, bigint]> = [];
-  for (let start = fromBlock; start <= toBlock; start += CHUNK_SIZE) {
-    const end = start + CHUNK_SIZE - 1n > toBlock ? toBlock : start + CHUNK_SIZE - 1n;
+  for (let start = fromBlock; start <= toBlock; start += chunkSize) {
+    const end = start + chunkSize - 1n > toBlock ? toBlock : start + chunkSize - 1n;
     ranges.push([start, end]);
   }
 

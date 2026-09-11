@@ -5,6 +5,7 @@ import { useAccount, usePublicClient } from "wagmi";
 import { parseAbiItem, type Address, type Hex } from "viem";
 import { VAULT_MANAGER_ADDRESS, isContractsConfigured } from "@/config/contracts";
 import { boundedFromBlock, getLogsChunked } from "@/lib/log-range";
+import { logsClientFor } from "@/lib/logs-client";
 
 const DEPOSITED_EVENT = parseAbiItem(
   "event Deposited(bytes32 indexed assetId, address indexed user, uint256 underlyingAmount, uint256 mintedAmount, uint256 feeAmount)",
@@ -30,7 +31,9 @@ export interface HistoryEntry {
  *  so the event log is the only source for "what did I do and when". */
 export function useTransactionHistory() {
   const { address: account } = useAccount();
-  const publicClient = usePublicClient();
+  // Not wagmi's own client on Sepolia: its endpoint is chosen for contract reads and cannot see
+  // logs older than about a week — see lib/logs-client.ts.
+  const publicClient = logsClientFor(usePublicClient());
   const enabled = isContractsConfigured && Boolean(account) && Boolean(publicClient);
 
   const { data, isLoading, isError, refetch } = useQuery({

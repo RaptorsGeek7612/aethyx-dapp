@@ -29,14 +29,16 @@ const connectors = connectorsForWallets(
 
 // Not wagmi/viem's own bundled default (thirdweb's public endpoint) — that one advertises a
 // generous eth_getLogs range and permissive CORS to a single curl request, but drops the CORS
-// header under this app's actual load (7 assets × several reads each, refetched on intervals,
-// plus lib/log-range.ts's chunked getLogs calls all firing close together) — confirmed with a
-// real headless-browser run against the deployed site: dozens of
-// "blocked by CORS policy: No 'Access-Control-Allow-Origin' header" errors that a single
-// isolated request never reproduces. publicnode's endpoint tolerates both a several-hundred-block
-// getLogs range and this app's real concurrent request volume — verified the same way. Override
-// with NEXT_PUBLIC_SEPOLIA_RPC_URL only after checking a candidate against actual page load, not
-// just a lone request — that's exactly what went wrong here once already.
+// header under this app's actual load, confirmed with a real headless-browser run against the
+// deployed site. publicnode keeps its CORS header under that load and answers one batched POST of
+// 75 contract reads in 163 ms, which is what this transport is for.
+//
+// What it is NOT good for is history: publicnode prunes to roughly the last 50,000 blocks, and a
+// log query reaching further back returns an empty array rather than an error. That is why
+// eth_getLogs does not go through this transport at all — see lib/logs-client.ts, and set
+// NEXT_PUBLIC_SEPOLIA_LOGS_RPC_URL rather than this variable if history is what you are fixing.
+// Override with NEXT_PUBLIC_SEPOLIA_RPC_URL only after checking a candidate against actual page
+// load, not just a lone request — that's exactly what went wrong here once already.
 const sepoliaRpcUrl = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com";
 
 // Without this, every useReadContract/getLogs call is its own HTTP POST — a first paint with 7
