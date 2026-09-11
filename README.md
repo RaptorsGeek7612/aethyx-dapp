@@ -145,15 +145,20 @@ inclure le verrouillage de `ROUTER_ROLE` et le durcissement d'`OracleManager` �
 | `priceSourceSecondary` (ManualPriceSource) | `0x21D2e5dc6D2400c460039F8597c148429d12cd2f` |
 | `ChainlinkPriceSource` (vrai flux Sepolia XAU/USD) | `0x8e6ded34eeE24F6270F696eeDFfbD479Dd0bdb4A` |
 
-Marché immobilier courant, déployé par `scripts/deploy-real-estate-market.ts` sous
-l'identifiant `REAL_ESTATE_PARIS_01_V3` (blocage de 30 jours) — voir
+Marché immobilier courant, déployé par `scripts/deploy-real-estate-market.ts` sous l'identifiant
+`REAL_ESTATE_PARIS_01_V4` (blocage de 30 jours, calendrier global) — voir
 `ignition/deployments/chain-11155111/real_estate_market.json` :
 
 | Composant | Adresse |
 |---|---|
-| `RealEstateAdapter` | `0x36b88A2b79D49bCd870945350e89a133624BC69B` |
-| Token wrappé (`RLD`) | `0x0B19296cbC941F0695fe20278716A0c7DdD3595b` |
+| `RealEstateAdapter` | `0x7aE821eb6e47E8A2CCAf62A309e22a3762d63700` |
+| Token wrappé (`RLD`) | `0xCFBC854Fa6115DAC6B3b92C4C960dd9D77b810D8` |
 | Sous-jacent ERC-3643 | `0x49CEfD290FcdCDb951E68C68cbae7400551aebf9` |
+| `RealEstateAssetFactory` (redéployée) | `0xABB4C7D09bD9e7F4a5822b37405c747B13ed71aD` |
+
+La fabrique de la table précédente (`0x0d759a29…92cE`) émettait encore l'adaptateur d'origine :
+une fabrique fige le bytecode de son adaptateur au moment où elle est compilée. Voir
+[`backend/AUDIT.md`](backend/AUDIT.md), constat n°7.
 
 `ChainlinkPriceSource` est enregistré dans `OracleManager` sous son propre identifiant d'actif
 `GOLD_USD_OZ`, et non sous `GOLD` : le flux réel publie des dollars par once troy, tandis que les

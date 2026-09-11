@@ -50,7 +50,7 @@ export interface AssetDefinition {
 // set once when the market is deployed (see RealEstateAdapter.sol), which is how DeFi protocols
 // normally express a holding period — a property of the contract you deposit into, not a
 // parameter of your deposit. The UI reads it off the adapter and shows it; it never offers it.
-const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V3";
+const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V4";
 
 // VaultManager has no on-chain enumeration of registered assets (a deliberate simplicity
 // trade-off — see AssetAdapter.sol's lesson on the mapping-based registry). Until an indexer
@@ -109,15 +109,19 @@ export const ASSETS: AssetDefinition[] = [
 
 // Asset ids that predate a later redeploy or restructuring and are no longer in ASSETS above, but
 // still show up in wallet history (VaultManager keeps every Deposited/Redeemed event forever —
-// see useTransactionHistory). Two generations of real-estate market sit here: REAL_ESTATE_PARIS_01,
-// the single untiered market from the first post-ROUTER_ROLE-fix redeploy, and the five
-// per-lock-up tiers that briefly replaced it while the lock-up was a depositor-facing choice.
-// Kept here purely so TransactionHistory can label those rows instead of showing "Unknown asset" —
-// not something a depositor can act on going forward, so they're deliberately absent from ASSETS.
+// see useTransactionHistory). Three generations of real-estate market sit here:
+// REAL_ESTATE_PARIS_01, the single untiered market from the first post-ROUTER_ROLE-fix redeploy;
+// the five per-lock-up tiers that briefly replaced it while the lock-up was a depositor-facing
+// choice; and _V3, superseded because the factory that produced it still emitted the original
+// adapter, whose lock-up a self-transfer walked straight past (see backend/AUDIT.md findings 1
+// and 7). Kept here purely so TransactionHistory can label those rows instead of showing
+// "Unknown asset" — not something a depositor can act on going forward, so they're deliberately
+// absent from ASSETS.
 const RETIRED_LOCKUP_TIERS = ["15D", "1M", "3M", "6M", "1Y"] as const;
 
 export const LEGACY_ASSET_LABELS: Record<Hex, string> = {
   [assetIdFromLabel("REAL_ESTATE_PARIS_01")]: "Paris Property #01 (legacy, pre-tier split)",
+  [assetIdFromLabel("REAL_ESTATE_PARIS_01_V3")]: "Paris Property #01 (legacy, pre-market-wide lock-up)",
   ...Object.fromEntries(
     RETIRED_LOCKUP_TIERS.map((key) => [
       assetIdFromLabel(`REAL_ESTATE_PARIS_01_${key}`),

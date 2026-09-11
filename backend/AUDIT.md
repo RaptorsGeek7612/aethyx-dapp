@@ -9,17 +9,22 @@
 
 | # | Constat | Sévérité | Statut sur Sepolia |
 |---|---|---|---|
-| 1 | Le blocage immobilier se contourne par auto-transfert | **Élevée** | **Corrigé** — non redéployé |
+| 1 | Le blocage immobilier se contourne par auto-transfert | **Élevée** | **Corrigé et déployé** |
 | 2 | Frais réglables jusqu'à 100 % | **Moyenne** | Latent (frais à 0) |
 | 3 | Rachat de poussière : destruction sans contrepartie | **Faible** | Latent (sous-jacents en 18 décimales) |
 | 4 | `getPrice` revert sur horodatage futur, hors `try/catch` | **Faible** | Latent |
 | 5 | Valeur de retour de `transferFrom` ignorée | **Faible** | Non exploitable en l'état |
 | 6 | `registerAsset` ne vérifie pas la cohérence de l'`assetId` | **Faible** | Non exploitable en l'état |
-| 7 | Les fabriques figent le bytecode de leur adaptateur | **Moyenne** | **Actif** — le marché déployé porte l'adaptateur d'origine |
+| 7 | Les fabriques figent le bytecode de leur adaptateur | **Moyenne** | **Corrigé** — fabrique redéployée, ancienne encore habilitée |
 
-Aucun constat critique. Le constat 1 invalidait une propriété que le protocole annonce ; il a été
-corrigé dans le code après cette revue (voir sa section). **Le marché déployé sur Sepolia porte
-encore l'adaptateur vulnérable** : la correction n'entrera en vigueur qu'au prochain déploiement.
+Aucun constat critique. Le constat 1 invalidait une propriété que le protocole annonce ; il est
+corrigé et déployé. Le constat 7, découvert en tentant ce déploiement, expliquait pourquoi deux
+générations de correctifs n'avaient jamais atteint la chaîne.
+
+Marché en vigueur : `REAL_ESTATE_PARIS_01_V4`, adaptateur `0x7aE821eb…3700` (6 051 octets, calendrier
+global vérifié par balayage des sélecteurs), fabrique `0xABB4C7D0…71aD`. **Reste à faire** : révoquer
+le `FACTORY_ROLE` de la fabrique remplacée `0x0d759a29…92cE`, qui peut encore enregistrer des marchés
+adossés à l'adaptateur d'origine.
 
 ---
 
@@ -93,13 +98,16 @@ Conséquences :
   par deux tests : l'un vérifie que l'auto-transfert échoue puis réussit après maturité, l'autre
   que le token wrappé reste transférable pendant le blocage.
 
-**Non déployé, et pire que prévu.** L'adaptateur en place sur Sepolia (`0x36b88A2b…C69B`) ne porte
-pas seulement la version d'avant correction : le balayage de ses sélecteurs montre qu'il expose
-`lockedUntil(address)` et aucune des fonctions de calendrier. C'est l'adaptateur **d'origine**,
-celui d'avant même le passage à une échéance par dépôt. Voir le constat n°7 pour la cause.
+**Déployé.** Le marché `REAL_ESTATE_PARIS_01_V4` porte l'adaptateur `0x7aE821eb…3700`, vérifié par
+balayage de ses sélecteurs : `lockedAmountNow()`, `maturedAmountNow()`, `nextUnlockAt()` et
+`lockSchedule()` présents, `lockedUntil(address)` et `lockedAmountOf(address)` absents, et 6 051
+octets — la taille exacte de la compilation courante.
 
-Fermer la faille exige donc de redéployer la fabrique puis un marché neuf sous un nouvel
-`assetId`, `registerAsset` refusant de repointer un identifiant existant.
+Le marché précédent (`REAL_ESTATE_PARIS_01_V3`, adaptateur `0x36b88A2b…C69B`) était pire que cette
+section ne le disait d'abord : il exposait `lockedUntil(address)` et aucune fonction de calendrier,
+soit l'adaptateur **d'origine**, d'avant même le passage à une échéance par dépôt. Voir le constat
+n°7 pour la cause. Il reste enregistré et actif sur VaultManager — le frontend ne le référence plus,
+mais quiconque en détient le token wrappé peut encore l'utiliser.
 
 ---
 
