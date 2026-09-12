@@ -128,13 +128,11 @@ SEED_NETWORK=sepolia npx hardhat run scripts/seed-demo-assets.ts --network sepol
 
 Déploiement Sepolia courant (`backend/ignition/deployments/chain-11155111/`), redéployé pour
 inclure le verrouillage de `ROUTER_ROLE` et le durcissement d'`OracleManager` — vérifié
-`exact_match` sur [Sourcify](https://sourcify.dev). Ce déploiement précède le renommage en AETHYX ;
-le contrat d'entrée y est resté sous son nom d'origine, `InvestOrGateway` — immuable une fois
-déployé et vérifié, il ne peut pas être renommé sans redéploiement complet :
+`exact_match` sur [Sourcify](https://sourcify.dev) :
 
 | Contrat | Adresse |
 |---|---|
-| `InvestOrGateway` (nom d'origine — voir ci-dessus) | `0xb2aE412cE8c8af237Df28cF1fE06599D33F08d59` |
+| Gateway¹ | `0xb2aE412cE8c8af237Df28cF1fE06599D33F08d59` |
 | `VaultManager` | `0x63C5bACc8C4c8d6b18e1c909fAF4b8C5F6646b53` |
 | `OracleManager` | `0x3B5d8fbF69e4672D618639437d13A09204104DF5` |
 | `AccessManager` | `0x177528950CD48409c5bC74a8B9A1e280c7e8072f` |
@@ -145,6 +143,11 @@ déployé et vérifié, il ne peut pas être renommé sans redéploiement comple
 | `priceSourcePrimary` (ManualPriceSource) | `0x7656d3AdC0c464a8945417697Ceb78640B8a8933` |
 | `priceSourceSecondary` (ManualPriceSource) | `0x21D2e5dc6D2400c460039F8597c148429d12cd2f` |
 | `ChainlinkPriceSource` (vrai flux Sepolia XAU/USD) | `0x8e6ded34eeE24F6270F696eeDFfbD479Dd0bdb4A` |
+
+¹ Ce déploiement précède le renommage en AETHYX : sur Sourcify et Etherscan, ce contrat reste
+vérifié sous son nom de code source d'origine, `InvestOrGateway` — immuable une fois déployé, il
+ne peut pas être renommé sans redéploiement complet. Le code source actuel l'appelle
+`AethyxGateway` ; voir `backend/contracts/AethyxGateway.sol`.
 
 Marché immobilier courant, déployé par `scripts/deploy-real-estate-market.ts` sous l'identifiant
 `REAL_ESTATE_PARIS_01_V6` (30 jours, échéance par dépôt) — voir
