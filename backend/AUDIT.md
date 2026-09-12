@@ -1,6 +1,7 @@
 # Audit de sécurité — AETHYX Gateway
 
-**Date** : 11 septembre 2026, étendu le 12 septembre 2026 au module CDP
+**Date** : 11 septembre 2026, étendu le 12 septembre 2026 au module CDP puis à une passe de
+vérification Sourcify sur l'ensemble des contrats déployés (constats 10 et 11)
 **Périmètre** : les 23 fichiers de `backend/contracts/` à `c6c1f48` pour les constats 1 à 7 ; les
 26 fichiers à `078176a` pour les constats 8 et 9, qui ajoutent `CDPManager.sol` et `StableToken.sol`
 **Nature** : revue interne par lecture de code, non une attestation par un tiers indépendant
@@ -21,6 +22,7 @@
 | 8 | Liquidation du CDP sans socialisation de la mauvaise dette | **Moyenne à élevée selon paramètres** | **Mitigé** — fonds d'assurance alimenté par une part du frais de stabilité (`setInsuranceFundFeeBps`), mobilisé à la liquidation |
 | 9 | `addCollateralType` ne vérifie pas l'étalon du prix enregistré | **Faible à élevée selon l'erreur** | **Mitigé** — `deploy-cdp.ts` exige et vérifie une confirmation |
 | 10 | `CDPManager`/`StableToken` undeployable contre un `AccessManager` préexistant | **Élevée** | **Corrigé** — rôles calculés localement plutôt que lus sur l'instance fournie |
+| 11 | `RealEstateAssetFactory` V6 ne se vérifie pas sur Sourcify | **Non exploitable** | **Non résolu** — ce qu'elle a déployé se vérifie, elle-même non ; cause exacte non isolée |
 
 Aucun constat critique. Le constat 1 invalidait une propriété que le protocole annonce ; il est
 corrigé et déployé. Le constat 7, découvert en tentant ce déploiement, expliquait pourquoi deux
@@ -456,6 +458,46 @@ exact de l'`AccessManager` ciblé.
 
 **Statut.** Corrigé avant tout déploiement Sepolia réussi du module ; aucune position ni fonds
 utilisateur n'était en jeu.
+
+---
+
+## 11. `RealEstateAssetFactory` V6 ne se vérifie pas sur Sourcify — **Non exploitable** · non résolu
+
+**Localisation** : `0x1cd0c39Df0135895b39cDf4f617b387607689B9D` (fabrique du marché
+`REAL_ESTATE_PARIS_01_V6`), découvert en vérifiant a posteriori l'ensemble des contrats déployés
+sur Sourcify.
+
+**Description.** `npx hardhat verify sourcify` échoue sur cette adresse avec
+`HHE80009: bytecode does not match`, alors que `StableToken`, `CDPManager`, l'adaptateur et le
+token que cette même fabrique a déployés (`RealEstateAdapter` et `RLD`, tous deux à l'adresse
+enregistrée dans `real_estate_market.json`) se vérifient sans problème contre le code source
+actuel. Diagnostic mené avant d'abandonner :
+
+- Comparaison de longueur (le test que `deploy-real-estate-market.ts` utilise déjà pour détecter
+  une fabrique périmée, voir constat n°7) : identique, 17 181 octets des deux côtés.
+- Diff octet par octet entre le bytecode compilé localement et le bytecode on-chain : 235 octets
+  diffèrent, répartis en plusieurs plages.
+- Comparaison à `immutableReferences` (les emplacements que le compilateur lui-même déclare comme
+  variables `immutable`, donc censés différer légitimement d'un déploiement à l'autre) : sept des
+  plages diffèrent exactement aux emplacements attendus des deux immuables du contrat
+  (`accessManager` hérité d'`AccessManaged`, `vaultManager` propre à la fabrique).
+- Il reste 32 octets de différence à un emplacement qui n'est *pas* un immuable déclaré, plus la
+  queue de métadonnées CBOR en fin de bytecode (qui diffère normalement d'une compilation à
+  l'autre et que Sourcify ignore habituellement, mais que le contrôle local de `hardhat-verify`
+  ne semble pas retrancher avant de comparer).
+
+**Ce que ça n'est pas.** Pas une répétition du constat n°7 : une fabrique réellement périmée
+émettrait un adaptateur ou un token différents de ce que dit le code source actuel — or
+`RealEstateAdapter` et `RLD`, produits par cette fabrique, se sont tous les deux vérifiés avec
+succès contre le code actuel. Ce que la fabrique a produit est prouvé correct ; c'est la
+vérification de la fabrique *elle-même* qui échoue, sans qu'on sache dire si la cause est un
+détail de compilation (réglages d'optimiseur, ordre de résolution des imports) propre à ce
+contrat, ou une limite du contrôle local de `hardhat-verify` sur la troncature des métadonnées.
+
+**Statut.** Non résolu. Aucun impact fonctionnel identifié — c'est un écart de vérification,
+pas un signe de code périmé ou de comportement incorrect. À reprendre si quelqu'un a le temps
+d'isoler la cause exacte, ou d'essayer une resoumission directe à l'API Sourcify en contournant
+le contrôle local de `hardhat-verify`.
 
 ---
 
