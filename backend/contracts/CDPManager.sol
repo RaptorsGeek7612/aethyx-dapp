@@ -162,6 +162,16 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
         uint256 debtRepaid,
         uint256 collateralSeized
     );
+    /// @notice Émis en plus de `PositionLiquidated` lorsque le collatéral saisi valait, au prix
+    ///         constaté au moment de la liquidation, moins que la dette qu'il vient de couvrir —
+    ///         voir `backend/AUDIT.md`, constat n°8. Purement informatif : aucun mécanisme ne
+    ///         compense aujourd'hui le liquidateur ni ne redistribue ce manque, cet événement est
+    ///         le seul signal on-chain qu'une telle liquidation a eu lieu.
+    /// @param user Emprunteur dont la position a laissé un manque.
+    /// @param collateralId Collatéral concerné.
+    /// @param shortfall Écart, en 18 décimales de stablecoin, entre la dette remboursée et la
+    ///        valeur du collatéral saisi au prix constaté.
+    event BadDebtRealized(address indexed user, bytes32 indexed collateralId, uint256 shortfall);
 
     /// @notice Le collatéral est inconnu ou gelé.
     /// @param collateralId Collatéral concerné.
@@ -400,8 +410,8 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     ///      contrat. La marge du liquidateur est l'écart, au moment où il agit, entre la valeur
     ///      du collatéral reçu et la dette remboursée ; rien ne garantit qu'elle soit positive
     ///      si le prix a chuté d'un coup sous le seuil de liquidation lui-même (dette
-    ///      partiellement non couverte, ou "bad debt") — ce cas n'est pas traité séparément dans
-    ///      cette première version.
+    ///      partiellement non couverte, ou "bad debt"). Ce cas n'est pas compensé — voir
+    ///      `backend/AUDIT.md`, constat n°8 — mais `BadDebtRealized` le rend au moins visible.
     /// @param user Emprunteur dont la position est liquidée.
     /// @param collateralId Collatéral concerné.
     function liquidate(address user, bytes32 collateralId) external whenNotPaused nonReentrant {
@@ -417,6 +427,14 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
 
         uint256 debtRepaid = position.debtAmount;
         uint256 collateralSeized = position.collateralAmount;
+
+        // Purely observational — see BadDebtRealized's natspec. Computed before any state change
+        // below, at the same price `ratioBps` above was already judged against.
+        (uint256 price, ) = oracleManager.getPrice(collateralId);
+        uint256 collateralValue = (collateralSeized * price) / 1e18;
+        if (collateralValue < debtRepaid) {
+            emit BadDebtRealized(user, collateralId, debtRepaid - collateralValue);
+        }
 
         position.debtAmount = 0;
         position.collateralAmount = 0;

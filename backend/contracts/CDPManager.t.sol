@@ -374,6 +374,37 @@ contract CDPManagerTest is Test {
         assertEq(stableToken.balanceOf(address(treasury)), 40e18);
     }
 
+    /// @notice Une chute de prix assez brutale pour traverser d'un coup le seuil de liquidation
+    ///         *et* la pleine couverture laisse le liquidateur rembourser plus que le collatéral
+    ///         saisi ne vaut. Rien ne l'en empêche ni ne compense ce manque (voir
+    ///         `backend/AUDIT.md`, constat n°8) ; `BadDebtRealized` le rend au moins visible.
+    function test_LiquidationEmitsBadDebtRealizedWhenCollateralFallsShortOfDebt() public {
+        _fundCollateral(alice, 200e18);
+        vm.startPrank(alice);
+        cdp.depositCollateral(FEE_TEST, 200e18);
+        cdp.mintDebt(FEE_TEST, 100e18); // ratio 200 %, sain avant la chute de prix
+        vm.stopPrank();
+
+        _fundCollateral(bob, 1_000e18);
+        vm.startPrank(bob);
+        cdp.depositCollateral(FEE_TEST, 1_000e18);
+        cdp.mintDebt(FEE_TEST, 100e18);
+        vm.stopPrank();
+
+        // 200e18 de collatéral à 0,3 valent 60e18, contre 100e18 de dette : un manque de 40e18
+        // que personne ne peut éviter de prendre à sa charge en liquidant.
+        priceSource.setPrice(0.3e18, block.timestamp);
+
+        vm.startPrank(bob);
+        stableToken.approve(address(cdp), 100e18);
+        vm.expectEmit(true, true, false, true);
+        emit CDPManager.BadDebtRealized(alice, FEE_TEST, 40e18);
+        vm.expectEmit(true, true, true, true);
+        emit CDPManager.PositionLiquidated(alice, FEE_TEST, bob, 100e18, 200e18);
+        cdp.liquidate(alice, FEE_TEST);
+        vm.stopPrank();
+    }
+
     function test_DepositRevertsWhenCollateralNotActive() public {
         cdp.setCollateralActive(GOLD, false);
         _fundCollateral(alice, 1e18);

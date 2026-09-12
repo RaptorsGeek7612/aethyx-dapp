@@ -7,10 +7,16 @@ import { network } from "hardhat";
 // seed-demo-assets.ts and deploy-real-estate-market.ts: the core module never grows contracts
 // that weren't part of the original protocol.
 //
-//   hardhat run scripts/deploy-cdp.ts --network localhost
+//   EXPECTED_GOLD_PRICE_EUR_PER_GRAM=92.40 hardhat run scripts/deploy-cdp.ts --network localhost
 //
 // Set SEED_NETWORK to target a different network (e.g. `sepolia`) already deployed via Ignition.
 // Re-running is safe: each step is skipped if it has already been done.
+//
+// EXPECTED_GOLD_PRICE_EUR_PER_GRAM is required before addCollateralType runs — see AUDIT.md,
+// finding 9: nothing on-chain stops registering a collateral whose oracle price is denominated
+// in the wrong unit (the GOLD-vs-GOLD_USD_OZ trap the README documents for VaultManager applies
+// here too), so the operator states the price they expect in the unit they expect it in, and the
+// script refuses to proceed if the live oracle reading is more than 25% off from it.
 
 const GOLD_ASSET_ID_LABEL = "GOLD";
 // 150 % to open or increase a position, liquidatable below 130 % — see CDPManager.sol's natspec
@@ -37,6 +43,7 @@ console.log("Deploying CDP module as", admin.address, "on", networkName);
 
 const accessManager = await ethers.getContractAt("AccessManager", accessManagerAddress);
 const vaultManager = await ethers.getContractAt("VaultManager", vaultManagerAddress);
+const oracleManager = await ethers.getContractAt("OracleManager", oracleManagerAddress);
 
 // --- 1. StableToken + CDPManager, or the ones already recorded from a previous run -------------
 const cdpRecordPath = `${deploymentDir}/cdp.json`;
@@ -101,6 +108,31 @@ if (goldAsset.adapter === ethers.ZeroAddress) {
 
 const existingCollateral = await cdpManager.collaterals(goldAssetId);
 if (existingCollateral.wrappedToken === ethers.ZeroAddress) {
+  const expectedPriceRaw = process.env.EXPECTED_GOLD_PRICE_EUR_PER_GRAM;
+  if (!expectedPriceRaw) {
+    throw new Error(
+      "EXPECTED_GOLD_PRICE_EUR_PER_GRAM is required before registering a new collateral type — " +
+        "see this script's header comment and AUDIT.md finding 9. Example: " +
+        "EXPECTED_GOLD_PRICE_EUR_PER_GRAM=92.40",
+    );
+  }
+  const expectedPrice = ethers.parseUnits(expectedPriceRaw, 18);
+  const [livePrice] = await oracleManager.getPrice(goldAssetId);
+  const deviationBps =
+    (BigInt(10_000) * (livePrice > expectedPrice ? livePrice - expectedPrice : expectedPrice - livePrice)) /
+    expectedPrice;
+  console.log(
+    `${GOLD_ASSET_ID_LABEL} live oracle price: ${ethers.formatUnits(livePrice, 18)} — expected (confirmed by operator): ${expectedPriceRaw}`,
+  );
+  if (deviationBps > 2_500n) {
+    throw new Error(
+      `Live price deviates ${Number(deviationBps) / 100}% from EXPECTED_GOLD_PRICE_EUR_PER_GRAM — ` +
+        "refusing to register. This is exactly the failure mode finding 9 describes: a collateral " +
+        "id whose price isn't in the unit you think it's in (e.g. GOLD_USD_OZ instead of GOLD). " +
+        "Double-check the assetId and the expected value before overriding.",
+    );
+  }
+
   await (
     await cdpManager
       .connect(admin)

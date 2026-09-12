@@ -18,8 +18,8 @@ encore déployé, voir `backend/README.md#module-cdp`
 | 5 | Valeur de retour de `transferFrom` ignorée | **Faible** | Non exploitable en l'état |
 | 6 | `registerAsset` ne vérifie pas la cohérence de l'`assetId` | **Faible** | Non exploitable en l'état |
 | 7 | Les fabriques figent le bytecode de leur adaptateur | **Moyenne** | **Corrigé** — fabrique redéployée, ancienne révoquée |
-| 8 | Liquidation du CDP sans socialisation de la mauvaise dette | **Moyenne à élevée selon paramètres** | **Non traité** — décision produit en attente |
-| 9 | `addCollateralType` ne vérifie pas l'étalon du prix enregistré | **Faible à élevée selon l'erreur** | Latent (aucun collatéral erroné enregistré à ce jour) |
+| 8 | Liquidation du CDP sans socialisation de la mauvaise dette | **Moyenne à élevée selon paramètres** | **Non traité** — décision produit en attente ; visibilité on-chain ajoutée (`BadDebtRealized`) |
+| 9 | `addCollateralType` ne vérifie pas l'étalon du prix enregistré | **Faible à élevée selon l'erreur** | **Mitigé** — `deploy-cdp.ts` exige et vérifie une confirmation |
 
 Aucun constat critique. Le constat 1 invalidait une propriété que le protocole annonce ; il est
 corrigé et déployé. Le constat 7, découvert en tentant ce déploiement, expliquait pourquoi deux
@@ -340,6 +340,13 @@ dette des autres positions du même collatéral — ne socialise une perte qui d
 à corriger, et il n'a pas encore été tranché. Consigné ici pour qu'il ne soit ni oublié ni pris
 pour un oubli.
 
+Un pas a été fait dans l'intervalle, purement diagnostique : `liquidate` émet désormais
+`BadDebtRealized(user, collateralId, shortfall)` chaque fois que le collatéral saisi valait, au
+prix constaté, moins que la dette remboursée — voir `test_LiquidationEmitsBadDebtRealizedWhenCollateralFallsShortOfDebt`.
+Aucun flux économique n'est modifié : personne n'est indemnisé, personne ne paie de plus. C'est un
+signal, pas une politique — de quoi observer si le risque décrit ci-dessus se matérialise avant
+d'avoir à choisir entre les trois directions.
+
 ---
 
 ## 9. `addCollateralType` ne vérifie pas l'étalon du prix enregistré — **Faible à élevée selon l'erreur**
@@ -366,13 +373,20 @@ que quelqu'un s'en aperçoive.
 `OracleManager` connaît de lui-même. La garde ne peut donc pas être purement on-chain ; elle doit
 être un contrôle de processus au moment du déploiement — un script qui, avant d'appeler
 `addCollateralType`, relit le prix courant du `collateralId` visé et le fait confirmer
-explicitement par l'opérateur (par exemple, en l'affichant en clair : *« 92,40 — confirmez qu'il
-s'agit bien d'euros par gramme »*), sur le modèle de ce que
-`scripts/deploy-real-estate-market.ts` fait déjà pour vérifier le bytecode d'une fabrique avant
-d'écrire quoi que ce soit.
+explicitement par l'opérateur, sur le modèle de ce que `scripts/deploy-real-estate-market.ts` fait
+déjà pour vérifier le bytecode d'une fabrique avant d'écrire quoi que ce soit.
 
-**Statut.** Latent : `deploy-cdp.ts` n'enregistre à ce jour que `GOLD`, dont le prix est bien en
-euros par gramme.
+**Mitigation appliquée.** `deploy-cdp.ts` exige désormais la variable d'environnement
+`EXPECTED_GOLD_PRICE_EUR_PER_GRAM` avant d'appeler `addCollateralType` : elle relit le prix courant
+sur `OracleManager`, le compare à la valeur annoncée par l'opérateur, et refuse d'enregistrer le
+collatéral au-delà de 25 % d'écart — précisément l'ordre de grandeur qui sépare l'euro par gramme
+du dollar par once. Vérifié : un prix dans le bon étalon avec une dérive plausible passe, un prix
+du mauvais étalon (rapport d'environ ×30) est rejeté. Le contrôle porte sur le *prix*, pas sur
+l'identité du token ; il attrape l'erreur d'étalon, pas une erreur d'`assetId` qui resterait dans
+le bon ordre de grandeur par coïncidence — un opérateur pressé reste la dernière ligne de défense
+pour ce second cas.
+
+**Statut.** Mitigé pour `GOLD`, le seul collatéral que `deploy-cdp.ts` enregistre à ce jour.
 
 ---
 
