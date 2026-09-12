@@ -89,6 +89,24 @@ npx hardhat ignition deploy ignition/modules/AethyxGateway.ts --network localhos
 npx hardhat run scripts/seed-demo-assets.ts --network localhost    # amorce les actifs de démo
 ```
 
+### Module CDP
+
+Deux chemins selon que le réseau ciblé a déjà le protocole cœur ou non :
+
+```shell
+# Réseau neuf : ignition/modules/CDP.ts compose AethyxGatewayModule via m.useModule et déploie
+# les deux d'un coup — pas besoin de lancer AethyxGateway.ts séparément avant.
+npx hardhat ignition deploy ignition/modules/CDP.ts --network localhost
+
+# Réseau où AethyxGateway est déjà déployé sous un run Ignition distinct (Sepolia aujourd'hui) :
+# le script lit ses adresses directement plutôt que de recomposer le module.
+npx hardhat run scripts/deploy-cdp.ts --network localhost
+```
+
+Dans les deux cas, aucun collatéral n'est enregistré par ce seul déploiement — `deploy-cdp.ts`
+s'en charge pour GOLD une fois le token wrappé disponible ; sur un réseau neuf, appelle
+`CDPManager.addCollateralType` toi-même une fois `GoldAssetFactory.deployGoldAsset` exécuté.
+
 ## Déploiement sur Sepolia
 
 Enregistre la clé de déploiement une fois pour toutes, via le keystore Hardhat chiffré
