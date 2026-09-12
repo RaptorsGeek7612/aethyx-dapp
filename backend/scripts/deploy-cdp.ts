@@ -26,6 +26,10 @@ const LIQUIDATION_THRESHOLD_BPS = 13_000n;
 // 2%/year, linear, minted to Treasury as it accrues — see CDPManager.sol's _currentDebt natspec.
 const STABILITY_FEE_BPS = 200n;
 const DEBT_CEILING = 1_000_000n * 10n ** 18n;
+// Half of every stability-fee accrual funds the insurance fund instead of the Treasury — see
+// AUDIT.md, finding 8. Placeholder demo value, not a risk assessment, same spirit as the ratios
+// above.
+const INSURANCE_FUND_FEE_BPS = 5_000n;
 
 const networkName = process.env.SEED_NETWORK ?? "localhost";
 const { ethers } = await network.create({ network: networkName, chainType: "l1" });
@@ -78,7 +82,14 @@ if (!cdpRecord.stableToken || !cdpRecord.cdpManager) {
 const cdpManager = await ethers.getContractAt("CDPManager", cdpRecord.cdpManager!);
 
 // --- 2. Roles ------------------------------------------------------------------------------------
-const riskManagerRole = await accessManager.RISK_MANAGER_ROLE();
+//
+// Computed locally (ethers.id, i.e. keccak256 of the role name) rather than read via
+// accessManager.RISK_MANAGER_ROLE()/DEBT_MINTER_ROLE(): those getters were added to
+// AccessManager.sol after this Sepolia instance was deployed, so it doesn't expose them and that
+// call reverts — but hasRole/grantRole (inherited from OpenZeppelin's AccessControl) work for any
+// bytes32 role regardless of whether this particular deployment names it. Same fix as
+// CDPManager.RISK_MANAGER_ROLE / StableToken.DEBT_MINTER_ROLE, which hit the exact same wall.
+const riskManagerRole = ethers.id("RISK_MANAGER_ROLE");
 if (!(await accessManager.hasRole(riskManagerRole, admin.address))) {
   await (await accessManager.connect(admin).grantRole(riskManagerRole, admin.address)).wait();
   console.log("RISK_MANAGER_ROLE granted to", admin.address);
@@ -86,7 +97,7 @@ if (!(await accessManager.hasRole(riskManagerRole, admin.address))) {
   console.log("RISK_MANAGER_ROLE already held by", admin.address);
 }
 
-const debtMinterRole = await accessManager.DEBT_MINTER_ROLE();
+const debtMinterRole = ethers.id("DEBT_MINTER_ROLE");
 if (!(await accessManager.hasRole(debtMinterRole, cdpManager.target))) {
   await (await accessManager.connect(admin).grantRole(debtMinterRole, cdpManager.target)).wait();
   console.log("DEBT_MINTER_ROLE granted to CDPManager");
@@ -94,7 +105,20 @@ if (!(await accessManager.hasRole(debtMinterRole, cdpManager.target))) {
   console.log("DEBT_MINTER_ROLE already held by CDPManager");
 }
 
-// --- 3. GOLD as the first collateral type ---------------------------------------------------------
+// --- 3. Insurance fund share of the stability fee -------------------------------------------------
+//
+// See AUDIT.md, finding 8: liquidating an underwater position doesn't guarantee the collateral
+// seized covers the debt repaid. This share of every future stability-fee accrual is redirected
+// from the Treasury into an on-contract insurance fund that liquidate() draws on to cover that
+// gap, up to whatever it holds — see CDPManager.sol's insuranceFundFeeBps natspec.
+if ((await cdpManager.insuranceFundFeeBps()) !== INSURANCE_FUND_FEE_BPS) {
+  await (await cdpManager.connect(admin).setInsuranceFundFeeBps(INSURANCE_FUND_FEE_BPS)).wait();
+  console.log("insuranceFundFeeBps set to", INSURANCE_FUND_FEE_BPS);
+} else {
+  console.log("insuranceFundFeeBps already set to", INSURANCE_FUND_FEE_BPS);
+}
+
+// --- 4. GOLD as the first collateral type ---------------------------------------------------------
 //
 // Reuses VaultManager's own GOLD wrapped token and the same assetId under which its price is
 // registered in OracleManager — see CDPManager.addCollateralType's natspec on why the id must
@@ -154,5 +178,6 @@ console.log("\nCDP module ready:");
 console.log("  StableToken", cdpRecord.stableToken);
 console.log("  CDPManager ", cdpRecord.cdpManager);
 console.log(
-  `\nNext: approve CDPManager for GLD, then cdpManager.depositCollateral(${GOLD_ASSET_ID_LABEL} id, amount) and mintDebt(...) — no frontend wiring yet.`,
+  "\nNext: set NEXT_PUBLIC_CDP_MANAGER_ADDRESS / NEXT_PUBLIC_STABLE_TOKEN_ADDRESS to these two " +
+    "addresses (frontend/.env.local, and Vercel for the live deployment), then use the /cdp page.",
 );

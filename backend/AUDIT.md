@@ -4,8 +4,8 @@
 **Périmètre** : les 23 fichiers de `backend/contracts/` à `c6c1f48` pour les constats 1 à 7 ; les
 26 fichiers à `078176a` pour les constats 8 et 9, qui ajoutent `CDPManager.sol` et `StableToken.sol`
 **Nature** : revue interne par lecture de code, non une attestation par un tiers indépendant
-**Déploiement examiné** : Sepolia, `VaultManager` `0x63C5bACc…6b53` — le module CDP n'y est pas
-encore déployé, voir `backend/README.md#module-cdp`
+**Déploiement examiné** : Sepolia, `VaultManager` `0x63C5bACc…6b53` ; module CDP déployé le
+12 septembre 2026, `CDPManager` `0xA3C28Deb…2F1d` — voir `backend/README.md#module-cdp`
 
 ## Synthèse
 
@@ -18,13 +18,22 @@ encore déployé, voir `backend/README.md#module-cdp`
 | 5 | Valeur de retour de `transferFrom` ignorée | **Faible** | Non exploitable en l'état |
 | 6 | `registerAsset` ne vérifie pas la cohérence de l'`assetId` | **Faible** | Non exploitable en l'état |
 | 7 | Les fabriques figent le bytecode de leur adaptateur | **Moyenne** | **Corrigé** — fabrique redéployée, ancienne révoquée |
-| 8 | Liquidation du CDP sans socialisation de la mauvaise dette | **Moyenne à élevée selon paramètres** | **Non traité** — décision produit en attente ; visibilité on-chain ajoutée (`BadDebtRealized`) |
+| 8 | Liquidation du CDP sans socialisation de la mauvaise dette | **Moyenne à élevée selon paramètres** | **Mitigé** — fonds d'assurance alimenté par une part du frais de stabilité (`setInsuranceFundFeeBps`), mobilisé à la liquidation |
 | 9 | `addCollateralType` ne vérifie pas l'étalon du prix enregistré | **Faible à élevée selon l'erreur** | **Mitigé** — `deploy-cdp.ts` exige et vérifie une confirmation |
+| 10 | `CDPManager`/`StableToken` undeployable contre un `AccessManager` préexistant | **Élevée** | **Corrigé** — rôles calculés localement plutôt que lus sur l'instance fournie |
 
 Aucun constat critique. Le constat 1 invalidait une propriété que le protocole annonce ; il est
 corrigé et déployé. Le constat 7, découvert en tentant ce déploiement, expliquait pourquoi deux
 générations de correctifs n'avaient jamais atteint la chaîne. Les constats 8 et 9 portent sur le
-module CDP, pas encore déployé : latents par construction, pas encore par chance.
+module CDP, pas encore déployé : latents par construction, pas encore par chance. Le constat 10,
+découvert en tentant *ce* déploiement, est le pendant du constat 7 pour les rôles plutôt que pour
+le bytecode d'une fabrique.
+
+Mise à jour du 12 septembre 2026 (soir) : le constat 8 est passé de « décision produit en
+attente » à « mitigé » — un fonds d'assurance, alimenté par une part configurable du frais de
+stabilité, comble désormais tout ou partie du manque d'une liquidation en bad debt. Voir la
+section dédiée ci-dessous pour ce que ça couvre et ce qui reste hors de sa portée. Le constat 10
+a été découvert et corrigé dans la foulée, en tentant effectivement ce déploiement.
 
 Marché en vigueur : `REAL_ESTATE_PARIS_01_V4`, adaptateur `0x7aE821eb…3700` (6 051 octets, calendrier
 global vérifié par balayage des sélecteurs), fabrique `0xABB4C7D0…71aD`.
@@ -288,7 +297,7 @@ imprime la commande sans l'exécuter — retirer un privilège en production se 
 
 ---
 
-## 8. Liquidation du CDP sans socialisation de la mauvaise dette — **Moyenne à élevée selon paramètres** · décision en attente
+## 8. Liquidation du CDP sans socialisation de la mauvaise dette — **Moyenne à élevée selon paramètres** · mitigé
 
 **Localisation** : `CDPManager.sol`, `liquidate`
 
@@ -336,16 +345,35 @@ dette des autres positions du même collatéral — ne socialise une perte qui d
   plafonds de dette bas (`debtCeiling`), le risque réel est petit et peut rester assumé — mais
   alors il faut le dire dans l'interface, pas seulement ici.
 
-**Statut.** Aucune des trois directions n'a été retenue : c'est un arbitrage produit, pas un bug
-à corriger, et il n'a pas encore été tranché. Consigné ici pour qu'il ne soit ni oublié ni pris
-pour un oubli.
+**Décision retenue.** Le fonds d'assurance — la première direction listée ci-dessus, celle qui
+demandait le moins de changement puisque le frais de stabilité existe déjà.
 
-Un pas a été fait dans l'intervalle, purement diagnostique : `liquidate` émet désormais
-`BadDebtRealized(user, collateralId, shortfall)` chaque fois que le collatéral saisi valait, au
-prix constaté, moins que la dette remboursée — voir `test_LiquidationEmitsBadDebtRealizedWhenCollateralFallsShortOfDebt`.
-Aucun flux économique n'est modifié : personne n'est indemnisé, personne ne paie de plus. C'est un
-signal, pas une politique — de quoi observer si le risque décrit ci-dessus se matérialise avant
-d'avoir à choisir entre les trois directions.
+**Mitigation appliquée.** `CDPManager.insuranceFundFeeBps` fixe, en points de base et
+uniformément sur tous les collatéraux, la part de chaque règlement de frais de stabilité
+(`_settleAccrual`) qui va au fonds plutôt qu'au Treasury — mintée directement au contrat, qui
+tient sa propre comptabilité dans `insuranceFundBalance`. Zéro par défaut : le fonds ne se remplit
+qu'une fois `setInsuranceFundFeeBps` explicitement appelé par `RISK_MANAGER_ROLE`.
+
+À la liquidation, si le collatéral saisi vaut moins que la dette remboursée, `liquidate` puise
+dans `insuranceFundBalance` — dans la limite de ce qu'il contient — et transfère ce complément au
+liquidateur en plus du collatéral, réduisant d'autant sa perte. `BadDebtRealized` porte désormais
+deux montants : `shortfall`, l'écart total, et `coveredByInsuranceFund`, la part que le fonds a
+absorbée ; ce qui reste (`shortfall - coveredByInsuranceFund`) demeure à la charge du liquidateur,
+exactement comme avant cette mitigation. Testé par
+`test_InsuranceFundFeeSplitsStabilityFeeBetweenFundAndTreasury` (répartition à l'accumulation) et
+`test_InsuranceFundCoversShortfallOnLiquidation` (couverture partielle d'un manque de 40e18 par un
+fonds qui n'en contient que 10e18).
+
+**Ce que ça ne couvre pas.** Le fonds est plafonné à ce qu'il a accumulé : un manque supérieur à
+son solde reste partiellement non couvert, et un fonds encore vide au moment d'un premier
+effondrement de prix (le cas typique d'un déploiement neuf) ne compense rien du tout. La part
+`insuranceFundFeeBps` est un paramètre de risque comme un autre — un `RISK_MANAGER_ROLE` compromis
+ou négligent peut la remettre à zéro, ou ne jamais l'avoir fixée. Ce n'est pas une garantie de
+solvabilité, seulement une réserve qui s'accumule avec le temps et amortit les manques dans sa
+limite.
+
+**Statut.** Mitigé. `deploy-cdp.ts` fixe une part par défaut au déploiement — voir son
+constant `INSURANCE_FUND_FEE_BPS`.
 
 ---
 
@@ -387,6 +415,47 @@ le bon ordre de grandeur par coïncidence — un opérateur pressé reste la der
 pour ce second cas.
 
 **Statut.** Mitigé pour `GOLD`, le seul collatéral que `deploy-cdp.ts` enregistre à ce jour.
+
+---
+
+## 10. `CDPManager`/`StableToken` étaient undeployable contre un `AccessManager` préexistant — **Élevée** · corrigé
+
+**Localisation** : `CDPManager.sol` (5 sites) et `StableToken.mint`, découvert en tentant le
+déploiement Sepolia du module CDP.
+
+**Description.** `CDPManager` et `StableToken` lisaient `RISK_MANAGER_ROLE` et `DEBT_MINTER_ROLE`
+via un appel externe — `accessManager.RISK_MANAGER_ROLE()`, `accessManager.DEBT_MINTER_ROLE()` —
+plutôt que de les calculer localement. Ces deux constantes ont été ajoutées à `AccessManager.sol`
+après que l'`AccessManager` de Sepolia (`0x177528950CD48409c5bC74a8B9A1e280c7e8072f`) a été déployé :
+son bytecode ne les expose donc pas. Vérifié par balayage de sélecteurs : `RISK_MANAGER_ROLE()` et
+`DEBT_MINTER_ROLE()` absents, `ASSET_MANAGER_ROLE()`, `PAUSER_ROLE()`, `hasRole`, `grantRole`
+présents.
+
+**Conséquence.** Chaque appel à `addCollateralType`, `setCollateralActive`, `setCollateralParams`,
+`setInsuranceFundFeeBps` (CDPManager) ou `mint` (StableToken) commence par cet appel externe pour
+déterminer *quel* rôle vérifier. Sur un `AccessManager` qui n'expose pas le getter, cet appel
+revert et fait échouer la fonction entière — pas seulement au déploiement : en permanence, à
+chaque invocation. Concrètement, le module CDP entier était inutilisable une fois pointé sur
+l'`AccessManager` déjà déployé, alors qu'`addCollateralType` avait déjà procédé aux deux
+déploiements de `StableToken` et `CDPManager` avant d'échouer sur l'octroi des rôles — capital et
+gas dépensés pour deux contrats qui restaient bloqués.
+
+**Ce que ça n'est pas.** Pas un problème de stockage des rôles : `hasRole`/`grantRole`, hérités
+d'`AccessControl`, fonctionnent pour n'importe quelle valeur `bytes32`, que cet `AccessManager`
+la connaisse nommément ou non — c'est uniquement le *getter de convenance* qui manquait.
+Redéployer l'`AccessManager` (et donc tout le protocole cœur qui pointe dessus de façon immuable)
+n'était ni nécessaire ni souhaitable.
+
+**Correction.** `RISK_MANAGER_ROLE` (`CDPManager`) et `DEBT_MINTER_ROLE` (`StableToken`) sont
+désormais des `bytes32 public constant` calculées localement (`keccak256("RISK_MANAGER_ROLE")`,
+identique bit à bit à ce que retourne un `AccessManager` neuf) plutôt que lues sur l'instance
+fournie au constructeur. `deploy-cdp.ts` fait de même côté script (`ethers.id(...)` plutôt que
+`await accessManager.RISK_MANAGER_ROLE()`). Aucun changement de comportement sur un déploiement
+neuf — la valeur est identique — seulement la suppression d'une dépendance inutile au bytecode
+exact de l'`AccessManager` ciblé.
+
+**Statut.** Corrigé avant tout déploiement Sepolia réussi du module ; aucune position ni fonds
+utilisateur n'était en jeu.
 
 ---
 

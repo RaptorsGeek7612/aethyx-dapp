@@ -88,7 +88,7 @@ pas : c'est la réserve mûre du marché qui autorise un rachat, identique pour 
 
 ## Déploiement
 
-En ligne sur **[investor-gateway.vercel.app](https://investor-gateway.vercel.app)**. Pour
+En ligne sur **[aethyx-gateway.vercel.app](https://aethyx-gateway.vercel.app)**. Pour
 redéployer :
 
 ```shell

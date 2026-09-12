@@ -90,6 +90,44 @@ non contournable — un échéancier commun au marché — supprimerait l'indivi
 [`backend/AUDIT.md`](backend/AUDIT.md), constat n°1, où l'arbitrage est consigné comme risque
 accepté.
 
+## Module CDP
+
+Un second module, indépendant du wrap RWA ci-dessus : `CDPManager` permet de verrouiller un token
+wrappé AETHYX (GLD, SLD, RLD...) en collatéral et d'emprunter contre lui `ioEUR`, un stablecoin de
+dette émis par `StableToken`, jusqu'au ratio de collatéralisation minimal fixé par type de
+collatéral. La dette porte un frais de stabilité continu, en points de base par an. Une position
+dont la valeur du collatéral tombe sous le seuil de liquidation — par une chute de prix ou par
+l'accumulation de ce frais — peut être intégralement liquidée par n'importe qui : le liquidateur
+rembourse toute la dette et reçoit tout le collatéral en échange.
+
+| Contrat | Rôle |
+|---|---|
+| `StableToken` (`ioEUR`) | Stablecoin de dette, `ERC20` + `ERC20Burnable`. Seul `CDPManager` (`DEBT_MINTER_ROLE`) peut en émettre. |
+| `CDPManager` | Verrouille le collatéral, émet et rembourse la dette, liquide les positions sous le seuil. Squelette de première version, volontairement simplifié : seule la liquidation totale est implémentée, ni partielle ni aux enchères. |
+
+Interface : page `/cdp` (`frontend/src/app/cdp/page.tsx`) — dépôt, retrait, emprunt, remboursement,
+et une console de liquidation ouverte à quiconque.
+
+Déployé sur Sepolia par `scripts/deploy-cdp.ts`, avec `GOLD` comme premier collatéral (150 % /
+130 %, frais de stabilité 2 %/an, fonds d'assurance à 50 % du frais — voir `backend/AUDIT.md`,
+constat n°8) :
+
+| Composant | Adresse |
+|---|---|
+| `StableToken` (`ioEUR`) | `0x5777897918ceDb97D7380cb034b265B32545E5cb` |
+| `CDPManager` | `0xA3C28Deb0E34086cA7b69AD26c19Dcf78BbA2F1d` |
+
+Voir [`backend/README.md`](backend/README.md#module-cdp) pour redéployer ou retrofitter ce module
+sur un autre réseau : `ignition/modules/CDP.ts` compose le protocole cœur sur un réseau neuf,
+`scripts/deploy-cdp.ts` retrofitte le module sur un déploiement existant.
+
+Deux constats de [`backend/AUDIT.md`](backend/AUDIT.md) portent spécifiquement sur ce module :
+constat n°8 (liquidation sans socialisation de la mauvaise dette — mitigé par un fonds
+d'assurance alimenté par une part configurable du frais de stabilité, mobilisé pour compléter un
+liquidateur en manque, dans la limite de son solde) et constat n°9 (absence de vérification de
+l'étalon du prix à l'enregistrement d'un collatéral — mitigé pour `GOLD` par `deploy-cdp.ts`, qui
+exige une confirmation opérateur avant d'écrire).
+
 ## Backend — Hardhat 3
 
 ```shell
@@ -145,8 +183,8 @@ inclure le verrouillage de `ROUTER_ROLE` et le durcissement d'`OracleManager` �
 | `ChainlinkPriceSource` (vrai flux Sepolia XAU/USD) | `0x8e6ded34eeE24F6270F696eeDFfbD479Dd0bdb4A` |
 
 ¹ Ce déploiement précède le renommage en AETHYX : sur Sourcify et Etherscan, ce contrat reste
-vérifié sous son nom de code source d'origine, `InvestOrGateway` — immuable une fois déployé, il
-ne peut pas être renommé sans redéploiement complet. Le code source actuel l'appelle
+vérifié sous son nom de code source d'origine, antérieur au renommage — immuable une fois
+déployé, il ne peut pas être renommé sans redéploiement complet. Le code source actuel l'appelle
 `AethyxGateway` ; voir `backend/contracts/AethyxGateway.sol`.
 
 Marché immobilier courant, déployé par `scripts/deploy-real-estate-market.ts` sous l'identifiant
@@ -180,10 +218,9 @@ cp .env.local.example .env.local   # renseigner les adresses ci-dessus + un proj
 npm run dev                        # http://localhost:3000
 ```
 
-En ligne sur **[investor-gateway.vercel.app](https://investor-gateway.vercel.app)** — domaine
-hérité du nom d'origine, à repointer manuellement vers un domaine AETHYX depuis le tableau de
-bord Vercel —, pointé sur le déploiement Sepolia ci-dessus. Pour déployer le tien, avec la
-[CLI Vercel](https://vercel.com/docs/cli) :
+En ligne sur **[aethyx-gateway.vercel.app](https://aethyx-gateway.vercel.app)**, pointé sur le
+déploiement Sepolia ci-dessus (protocole cœur et module CDP inclus). Pour déployer le tien, avec
+la [CLI Vercel](https://vercel.com/docs/cli) :
 
 ```shell
 npm run build
@@ -210,7 +247,7 @@ configuration). Chaque paquet expose aussi les mêmes vérifications en local : 
 ## Notes de sécurité
 
 Une revue de sécurité interne des contrats est consignée dans
-[`backend/AUDIT.md`](backend/AUDIT.md) : sept constats, dont un de sévérité élevée assumé comme
+[`backend/AUDIT.md`](backend/AUDIT.md) : neuf constats, dont un de sévérité élevée assumé comme
 risque accepté. À lire avant toute réutilisation de ce code.
 
 - L'`initialAdmin` d'`AccessManager` devrait être un multisig ou un timelock en production, jamais
@@ -218,5 +255,8 @@ risque accepté. À lire avant toute réutilisation de ce code.
 - `ROUTER_ROLE` (détenu par le seul `AethyxGateway`) est pleinement présumé ne transmettre que
   son propre `msg.sender` immédiat — ne jamais l'accorder à quoi que ce soit susceptible de
   transmettre une adresse tierce arbitraire.
+- La liquidation du module CDP ne socialise la mauvaise dette qu'à hauteur du fonds d'assurance
+  accumulé : un manque supérieur à son solde reste partiellement à la charge du liquidateur, et un
+  fonds encore vide (déploiement neuf) ne compense rien. Voir `backend/AUDIT.md`, constat n°8.
 - Ceci est du code de démonstration et de testnet (`MockERC3643`, `ManualPriceSource`) — non
   audité, non destiné à porter des fonds en mainnet tel quel.

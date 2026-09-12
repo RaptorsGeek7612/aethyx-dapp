@@ -17,6 +17,13 @@ import { AccessManaged } from "./access/AccessManaged.sol";
 ///         liquidateur qui permet à CDPManager de brûler lors d'un remboursement ou d'une
 ///         liquidation.
 contract StableToken is ERC20, ERC20Burnable, AccessManaged {
+    /// @notice Rôle habilité à émettre ce stablecoin, détenu exclusivement par CDPManager.
+    ///         Calculé localement plutôt que lu via `accessManager.DEBT_MINTER_ROLE()` — même
+    ///         raisonnement que `CDPManager.RISK_MANAGER_ROLE` : un `AccessManager` déjà déployé
+    ///         avant l'ajout de ce rôle à son code source n'expose pas ce getter, alors que
+    ///         `hasRole` fonctionne pour n'importe quelle valeur `bytes32`.
+    bytes32 public constant DEBT_MINTER_ROLE = keccak256("DEBT_MINTER_ROLE");
+
     /// @param name_ Nom du stablecoin.
     /// @param symbol_ Symbole du stablecoin.
     /// @param accessManager_ Adresse de l'AccessManager du protocole.
@@ -31,7 +38,7 @@ contract StableToken is ERC20, ERC20Burnable, AccessManaged {
     ///         de collatéralisation minimal.
     /// @param to Destinataire des tokens émis.
     /// @param amount Quantité à émettre, en 18 décimales.
-    function mint(address to, uint256 amount) external onlyRole(accessManager.DEBT_MINTER_ROLE()) {
+    function mint(address to, uint256 amount) external onlyRole(DEBT_MINTER_ROLE) {
         _mint(to, amount);
     }
 }

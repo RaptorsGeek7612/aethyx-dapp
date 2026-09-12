@@ -22,8 +22,11 @@ import { StableToken } from "./StableToken.sol";
 ///      l'architecture ne soit validée : ni liquidation partielle ni aux enchères — seule la
 ///      liquidation totale d'une position est implémentée, sur le même principe que le
 ///      compromis documenté pour l'échéance des dépôts immobiliers (voir le README, section
-///      RealEstateAdapter, et backend/AUDIT.md). Ni module de déploiement Ignition dédié au
-///      frais de stabilité, ni câblage frontend à ce stade.
+///      RealEstateAdapter, et backend/AUDIT.md). Déployable via `ignition/modules/CDP.ts` (réseau
+///      neuf) ou `scripts/deploy-cdp.ts` (retrofit sur un déploiement existant), et câblé côté
+///      frontend sur la page `/cdp` — voir backend/AUDIT.md, constats n°8 (fonds d'assurance,
+///      voir `insuranceFundFeeBps`) et n°9, pour ce que ça couvre et ce qui reste ouvert malgré
+///      ça.
 contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -71,14 +74,35 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     /// @dev Base annuelle sur laquelle `stabilityFeeBps` est exprimé.
     uint256 private constant SECONDS_PER_YEAR = 365 days;
 
+    /// @notice Rôle habilité à enregistrer un collatéral et à en ajuster les paramètres de
+    ///         risque. Calculé localement plutôt que lu via `accessManager.RISK_MANAGER_ROLE()` :
+    ///         la valeur est identique (même chaîne, même `keccak256`), mais un `AccessManager`
+    ///         déjà déployé avant l'ajout de ce rôle à son code source n'expose pas ce getter,
+    ///         alors que `hasRole`/`grantRole` — hérités d'`AccessControl` — fonctionnent pour
+    ///         n'importe quelle valeur `bytes32`, connue de ce contrat ou non. Se fier au getter
+    ///         externe rendait CDPManager undeployable contre un tel AccessManager préexistant.
+    bytes32 public constant RISK_MANAGER_ROLE = keccak256("RISK_MANAGER_ROLE");
+
     /// @notice Registre des prix consulté pour valoriser chaque collatéral.
     OracleManager public immutable oracleManager;
 
     /// @notice Stablecoin de dette émis contre le collatéral verrouillé ici.
     StableToken public immutable stableToken;
 
-    /// @notice Destinataire du frais de stabilité accumulé, minté au fil de l'eau.
+    /// @notice Destinataire de la part du frais de stabilité qui n'alimente pas le fonds
+    ///         d'assurance, mintée au fil de l'eau — voir `insuranceFundFeeBps`.
     address public immutable treasury;
+
+    /// @notice Part du frais de stabilité affectée au fonds d'assurance plutôt qu'au Treasury, en
+    ///         points de base, appliquée uniformément à tous les collatéraux. Zéro par défaut :
+    ///         le fonds ne se remplit qu'une fois cette valeur explicitement fixée par
+    ///         `setInsuranceFundFeeBps`. Voir `backend/AUDIT.md`, constat n°8.
+    uint16 public insuranceFundFeeBps;
+
+    /// @notice Solde du fonds d'assurance, en 18 décimales de stablecoin, détenu par ce contrat
+    ///         lui-même. Alimenté par `_settleAccrual`, mobilisé par `liquidate` pour compléter
+    ///         un liquidateur dont le collatéral reçu ne couvre pas la dette remboursée.
+    uint256 public insuranceFundBalance;
 
     /// @notice Registre des types de collatéral, indexé par identifiant.
     /// @dev Réutilise volontairement les mêmes identifiants que VaultManager/OracleManager
@@ -147,8 +171,19 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     ///         liquidation la concernant.
     /// @param user Emprunteur dont la position accumule le frais.
     /// @param collateralId Collatéral concerné.
-    /// @param feeAmount Frais réglé, ajouté à la dette de la position et minté au Treasury.
+    /// @param feeAmount Frais réglé, ajouté à la dette de la position et réparti entre le
+    ///        Treasury et le fonds d'assurance selon `insuranceFundFeeBps` — voir
+    ///        `InsuranceFundFunded` pour la part qui va au fonds.
     event StabilityFeeAccrued(address indexed user, bytes32 indexed collateralId, uint256 feeAmount);
+    /// @notice Émis lorsque `insuranceFundFeeBps` change.
+    /// @param insuranceFundFeeBps Nouvelle part du frais de stabilité affectée au fonds, en
+    ///        points de base.
+    event InsuranceFundFeeBpsSet(uint16 insuranceFundFeeBps);
+    /// @notice Émis chaque fois qu'un règlement de frais de stabilité alimente le fonds
+    ///         d'assurance — la part de `StabilityFeeAccrued` régie par `insuranceFundFeeBps`.
+    /// @param collateralId Collatéral dont l'accumulation a alimenté le fonds.
+    /// @param amount Montant minté au fonds, en 18 décimales de stablecoin.
+    event InsuranceFundFunded(bytes32 indexed collateralId, uint256 amount);
     /// @notice Émis lorsqu'une position est liquidée.
     /// @param user Emprunteur liquidé.
     /// @param collateralId Collatéral concerné.
@@ -164,14 +199,21 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     );
     /// @notice Émis en plus de `PositionLiquidated` lorsque le collatéral saisi valait, au prix
     ///         constaté au moment de la liquidation, moins que la dette qu'il vient de couvrir —
-    ///         voir `backend/AUDIT.md`, constat n°8. Purement informatif : aucun mécanisme ne
-    ///         compense aujourd'hui le liquidateur ni ne redistribue ce manque, cet événement est
-    ///         le seul signal on-chain qu'une telle liquidation a eu lieu.
+    ///         voir `backend/AUDIT.md`, constat n°8. Le fonds d'assurance comble jusqu'à
+    ///         `coveredByInsuranceFund` de cet écart au profit du liquidateur, dans la limite de
+    ///         son solde ; `shortfall - coveredByInsuranceFund` reste à sa charge.
     /// @param user Emprunteur dont la position a laissé un manque.
     /// @param collateralId Collatéral concerné.
-    /// @param shortfall Écart, en 18 décimales de stablecoin, entre la dette remboursée et la
-    ///        valeur du collatéral saisi au prix constaté.
-    event BadDebtRealized(address indexed user, bytes32 indexed collateralId, uint256 shortfall);
+    /// @param shortfall Écart total, en 18 décimales de stablecoin, entre la dette remboursée et
+    ///        la valeur du collatéral saisi au prix constaté.
+    /// @param coveredByInsuranceFund Part de `shortfall` compensée au liquidateur depuis le fonds
+    ///        d'assurance.
+    event BadDebtRealized(
+        address indexed user,
+        bytes32 indexed collateralId,
+        uint256 shortfall,
+        uint256 coveredByInsuranceFund
+    );
 
     /// @notice Le collatéral est inconnu ou gelé.
     /// @param collateralId Collatéral concerné.
@@ -187,6 +229,10 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     /// @notice Un frais de stabilité supérieur à 100 % par an a été demandé.
     /// @param stabilityFeeBps Valeur refusée, en points de base.
     error StabilityFeeTooHigh(uint16 stabilityFeeBps);
+    /// @notice Une part du frais de stabilité supérieure à 100 % a été demandée pour le fonds
+    ///         d'assurance.
+    /// @param insuranceFundFeeBps Valeur refusée, en points de base.
+    error InsuranceFundFeeTooHigh(uint16 insuranceFundFeeBps);
     /// @notice Le plafond de dette du collatéral serait dépassé.
     /// @param collateralId Collatéral concerné.
     /// @param wouldBeTotalDebt Dette totale qui résulterait de l'opération.
@@ -246,7 +292,7 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
         uint16 liquidationThresholdBps,
         uint16 stabilityFeeBps,
         uint256 debtCeiling
-    ) external onlyRole(accessManager.RISK_MANAGER_ROLE()) {
+    ) external onlyRole(RISK_MANAGER_ROLE) {
         if (address(collaterals[collateralId].wrappedToken) != address(0)) {
             revert CollateralAlreadyRegistered(collateralId);
         }
@@ -277,10 +323,7 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     ///         possibles sur les positions déjà ouvertes.
     /// @param collateralId Collatéral concerné.
     /// @param active Nouvel état souhaité.
-    function setCollateralActive(
-        bytes32 collateralId,
-        bool active
-    ) external onlyRole(accessManager.RISK_MANAGER_ROLE()) {
+    function setCollateralActive(bytes32 collateralId, bool active) external onlyRole(RISK_MANAGER_ROLE) {
         collaterals[collateralId].active = active;
         emit CollateralActiveSet(collateralId, active);
     }
@@ -297,7 +340,7 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
         uint16 liquidationThresholdBps,
         uint16 stabilityFeeBps,
         uint256 debtCeiling
-    ) external onlyRole(accessManager.RISK_MANAGER_ROLE()) {
+    ) external onlyRole(RISK_MANAGER_ROLE) {
         _validateRiskParams(minCollateralRatioBps, liquidationThresholdBps);
         _validateStabilityFee(stabilityFeeBps);
         CollateralConfig storage config = collaterals[collateralId];
@@ -312,6 +355,16 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
             stabilityFeeBps,
             debtCeiling
         );
+    }
+
+    /// @notice Fixe la part du frais de stabilité affectée au fonds d'assurance plutôt qu'au
+    ///         Treasury, en points de base. S'applique à toute accumulation future sur tous les
+    ///         collatéraux — voir `_settleAccrual` et `backend/AUDIT.md`, constat n°8.
+    /// @param insuranceFundFeeBps_ Nouvelle part, en points de base (10 000 = 100 % du frais).
+    function setInsuranceFundFeeBps(uint16 insuranceFundFeeBps_) external onlyRole(RISK_MANAGER_ROLE) {
+        if (insuranceFundFeeBps_ > BPS_DENOMINATOR) revert InsuranceFundFeeTooHigh(insuranceFundFeeBps_);
+        insuranceFundFeeBps = insuranceFundFeeBps_;
+        emit InsuranceFundFeeBpsSet(insuranceFundFeeBps_);
     }
 
     /// @notice Suspend dépôt, retrait, émission et remboursement sur tous les collatéraux.
@@ -410,8 +463,9 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     ///      contrat. La marge du liquidateur est l'écart, au moment où il agit, entre la valeur
     ///      du collatéral reçu et la dette remboursée ; rien ne garantit qu'elle soit positive
     ///      si le prix a chuté d'un coup sous le seuil de liquidation lui-même (dette
-    ///      partiellement non couverte, ou "bad debt"). Ce cas n'est pas compensé — voir
-    ///      `backend/AUDIT.md`, constat n°8 — mais `BadDebtRealized` le rend au moins visible.
+    ///      partiellement non couverte, ou "bad debt"). Le fonds d'assurance comble ce manque
+    ///      dans la limite de son solde — voir `backend/AUDIT.md`, constat n°8 — et
+    ///      `BadDebtRealized` rend visible ce qui, au-delà, reste à la charge du liquidateur.
     /// @param user Emprunteur dont la position est liquidée.
     /// @param collateralId Collatéral concerné.
     function liquidate(address user, bytes32 collateralId) external whenNotPaused nonReentrant {
@@ -428,12 +482,19 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
         uint256 debtRepaid = position.debtAmount;
         uint256 collateralSeized = position.collateralAmount;
 
-        // Purely observational — see BadDebtRealized's natspec. Computed before any state change
-        // below, at the same price `ratioBps` above was already judged against.
+        // Computed before any state change below, at the same price `ratioBps` above was already
+        // judged against.
         (uint256 price, ) = oracleManager.getPrice(collateralId);
         uint256 collateralValue = (collateralSeized * price) / 1e18;
+
+        uint256 coveredByInsuranceFund = 0;
         if (collateralValue < debtRepaid) {
-            emit BadDebtRealized(user, collateralId, debtRepaid - collateralValue);
+            uint256 shortfall = debtRepaid - collateralValue;
+            coveredByInsuranceFund = shortfall < insuranceFundBalance ? shortfall : insuranceFundBalance;
+            if (coveredByInsuranceFund > 0) {
+                insuranceFundBalance -= coveredByInsuranceFund;
+            }
+            emit BadDebtRealized(user, collateralId, shortfall, coveredByInsuranceFund);
         }
 
         position.debtAmount = 0;
@@ -441,6 +502,9 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
         collaterals[collateralId].totalDebt -= debtRepaid;
 
         stableToken.burnFrom(msg.sender, debtRepaid);
+        if (coveredByInsuranceFund > 0) {
+            stableToken.transfer(msg.sender, coveredByInsuranceFund);
+        }
         collaterals[collateralId].wrappedToken.safeTransfer(msg.sender, collateralSeized);
 
         emit PositionLiquidated(user, collateralId, msg.sender, debtRepaid, collateralSeized);
@@ -465,11 +529,12 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     }
 
     /// @notice Règle le frais de stabilité accumulé depuis `position.lastAccrualTimestamp` :
-    ///         l'ajoute à la dette de la position et à la dette totale du collatéral, mint le
-    ///         montant correspondant au Treasury, et remet le compteur à l'heure actuelle. Ne
-    ///         fait rien au-delà de la mise à jour de l'horodatage si la position n'a aucune
-    ///         dette. Appelé en tout premier dans chaque fonction qui lit ou modifie une dette,
-    ///         de sorte que ces fonctions n'opèrent jamais que sur une dette à jour.
+    ///         l'ajoute à la dette de la position et à la dette totale du collatéral, mint la
+    ///         part `insuranceFundFeeBps` au fonds d'assurance et le reste au Treasury, et remet
+    ///         le compteur à l'heure actuelle. Ne fait rien au-delà de la mise à jour de
+    ///         l'horodatage si la position n'a aucune dette. Appelé en tout premier dans chaque
+    ///         fonction qui lit ou modifie une dette, de sorte que ces fonctions n'opèrent jamais
+    ///         que sur une dette à jour.
     /// @param user Titulaire de la position, pour l'événement émis.
     /// @param collateralId Collatéral concerné.
     /// @param position Position à régler.
@@ -479,7 +544,17 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
         if (fee > 0) {
             position.debtAmount = currentDebt_;
             collaterals[collateralId].totalDebt += fee;
-            stableToken.mint(treasury, fee);
+
+            uint256 toFund = (fee * insuranceFundFeeBps) / BPS_DENOMINATOR;
+            uint256 toTreasury = fee - toFund;
+            if (toFund > 0) {
+                stableToken.mint(address(this), toFund);
+                insuranceFundBalance += toFund;
+                emit InsuranceFundFunded(collateralId, toFund);
+            }
+            if (toTreasury > 0) {
+                stableToken.mint(treasury, toTreasury);
+            }
             emit StabilityFeeAccrued(user, collateralId, fee);
         }
         position.lastAccrualTimestamp = block.timestamp;

@@ -398,11 +398,95 @@ contract CDPManagerTest is Test {
         vm.startPrank(bob);
         stableToken.approve(address(cdp), 100e18);
         vm.expectEmit(true, true, false, true);
-        emit CDPManager.BadDebtRealized(alice, FEE_TEST, 40e18);
+        emit CDPManager.BadDebtRealized(alice, FEE_TEST, 40e18, 0);
         vm.expectEmit(true, true, true, true);
         emit CDPManager.PositionLiquidated(alice, FEE_TEST, bob, 100e18, 200e18);
         cdp.liquidate(alice, FEE_TEST);
         vm.stopPrank();
+    }
+
+    /// @notice `setInsuranceFundFeeBps` répartit chaque règlement de frais de stabilité entre le
+    ///         fonds et le Treasury, au prorata fixé — voir `backend/AUDIT.md`, constat n°8.
+    function test_InsuranceFundFeeSplitsStabilityFeeBetweenFundAndTreasury() public {
+        cdp.setInsuranceFundFeeBps(4_000); // 40 % au fonds, 60 % au Treasury
+
+        _fundCollateral(alice, 200e18);
+        vm.startPrank(alice);
+        cdp.depositCollateral(FEE_TEST, 200e18);
+        cdp.mintDebt(FEE_TEST, 100e18);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 365 days);
+
+        vm.startPrank(alice);
+        stableToken.approve(address(cdp), 10e18);
+        vm.expectEmit(false, false, false, true);
+        emit CDPManager.InsuranceFundFunded(FEE_TEST, 4e18);
+        cdp.repayDebt(FEE_TEST, 10e18); // règle le frais de 10e18 couru avant de rembourser
+        vm.stopPrank();
+
+        assertEq(cdp.insuranceFundBalance(), 4e18);
+        assertEq(stableToken.balanceOf(address(cdp)), 4e18);
+        assertEq(stableToken.balanceOf(address(treasury)), 6e18);
+    }
+
+    function test_SetInsuranceFundFeeBpsRevertsAboveOneHundredPercent() public {
+        vm.expectRevert(abi.encodeWithSelector(CDPManager.InsuranceFundFeeTooHigh.selector, 10_001));
+        cdp.setInsuranceFundFeeBps(10_001);
+    }
+
+    /// @notice Un fonds déjà alimenté comble tout ou partie du manque d'une liquidation en bad
+    ///         debt : le liquidateur reçoit la compensation directement, en plus du collatéral
+    ///         saisi, et `BadDebtRealized` distingue la part couverte de celle qui lui reste.
+    function test_InsuranceFundCoversShortfallOnLiquidation() public {
+        cdp.setInsuranceFundFeeBps(10_000); // tout le frais de stabilité au fonds, pour le remplir vite
+
+        // Une première position, sur un collatéral distinct, sert uniquement à faire courir le
+        // frais qui remplit le fonds avant la liquidation testée plus bas.
+        _fundCollateral(bob, 1_000e18);
+        vm.startPrank(bob);
+        cdp.depositCollateral(FEE_TEST, 1_000e18);
+        cdp.mintDebt(FEE_TEST, 100e18);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 365 days);
+        vm.startPrank(bob);
+        stableToken.approve(address(cdp), 1); // force le règlement du frais couru par un remboursement minimal
+        cdp.repayDebt(FEE_TEST, 1);
+        vm.stopPrank();
+
+        assertEq(cdp.insuranceFundBalance(), 10e18); // 10 %/an sur 100e18 pendant un an
+
+        // La source de prix, partagée entre GOLD et FEE_TEST, s'est périmée pendant l'année qui
+        // vient de s'écouler : la rafraîchir avant qu'Alice n'ouvre sa position sur GOLD.
+        priceSource.setPrice(1e18, block.timestamp);
+
+        // Alice ouvre une position saine sur le même collatéral, puis le prix s'effondre assez
+        // pour laisser un manque de 40e18 à la liquidation — même scénario que
+        // test_LiquidationEmitsBadDebtRealizedWhenCollateralFallsShortOfDebt.
+        _fundCollateral(alice, 200e18);
+        vm.startPrank(alice);
+        cdp.depositCollateral(GOLD, 200e18);
+        cdp.mintDebt(GOLD, 100e18);
+        vm.stopPrank();
+
+        priceSource.setPrice(0.3e18, block.timestamp);
+
+        address liquidator = address(0xC0FFEE);
+        deal(address(stableToken), liquidator, 100e18);
+        vm.startPrank(liquidator);
+        stableToken.approve(address(cdp), 100e18);
+        vm.expectEmit(true, true, false, true);
+        emit CDPManager.BadDebtRealized(alice, GOLD, 40e18, 10e18); // fonds à 10e18, manque de 40e18
+        cdp.liquidate(alice, GOLD);
+        vm.stopPrank();
+
+        assertEq(cdp.insuranceFundBalance(), 0);
+        // Le liquidateur a payé 100e18, reçu 200e18 de collatéral (à 0,3 : valeur 60e18) et 10e18
+        // compensés par le fonds : il lui reste 10e18 de stablecoin, contre une perte de 40e18
+        // sans compensation.
+        assertEq(stableToken.balanceOf(liquidator), 10e18);
+        assertEq(collateralToken.balanceOf(liquidator), 200e18);
     }
 
     function test_DepositRevertsWhenCollateralNotActive() public {
