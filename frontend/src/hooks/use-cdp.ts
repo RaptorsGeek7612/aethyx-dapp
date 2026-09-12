@@ -35,14 +35,20 @@ export interface CdpPosition {
 const NO_DEBT_RATIO = 2n ** 256n - 1n;
 
 /**
- * Everything the CDP page needs for one collateral type: risk parameters, the connected wallet's
- * position (debt live-accrued, not just its last-settled value), and the balances/allowances that
- * decide which actions are currently possible. Mirrors the two-stage shape of useAssetStaticData/
+ * Everything the CDP page needs for one collateral type: risk parameters, a position (debt
+ * live-accrued, not just its last-settled value), and the connected wallet's balances/allowances
+ * — the latter always read for the *connected* wallet, not `subject`, because they answer "can
+ * the person looking at this screen act", which for a liquidation lookup is a different address
+ * than the position being inspected. Mirrors the two-stage shape of useAssetStaticData/
  * useAssetData — collateral config first (it carries the wrapped token address), then everything
  * that address unlocks.
+ *
+ * @param subject Whose position to read. Defaults to the connected wallet — pass a different
+ *   address to look up any position, e.g. a liquidation target.
  */
-export function useCdpPosition(collateralId: Hex) {
-  const { address: account } = useAccount();
+export function useCdpPosition(collateralId: Hex, subject?: Address) {
+  const { address: connected } = useAccount();
+  const account = subject ?? connected;
 
   const {
     data: config,
@@ -100,24 +106,24 @@ export function useCdpPosition(collateralId: Hex) {
         functionName: "collateralRatioBps",
         args: [account ?? ZERO_ADDRESS, collateralId],
       },
-      { address: wrappedToken, abi: erc20Abi, functionName: "balanceOf", args: [account ?? ZERO_ADDRESS] },
+      { address: wrappedToken, abi: erc20Abi, functionName: "balanceOf", args: [connected ?? ZERO_ADDRESS] },
       {
         address: wrappedToken,
         abi: erc20Abi,
         functionName: "allowance",
-        args: [account ?? ZERO_ADDRESS, CDP_MANAGER_ADDRESS as Address],
+        args: [connected ?? ZERO_ADDRESS, CDP_MANAGER_ADDRESS as Address],
       },
       {
         address: STABLE_TOKEN_ADDRESS as Address,
         abi: erc20Abi,
         functionName: "balanceOf",
-        args: [account ?? ZERO_ADDRESS],
+        args: [connected ?? ZERO_ADDRESS],
       },
       {
         address: STABLE_TOKEN_ADDRESS as Address,
         abi: erc20Abi,
         functionName: "allowance",
-        args: [account ?? ZERO_ADDRESS, CDP_MANAGER_ADDRESS as Address],
+        args: [connected ?? ZERO_ADDRESS, CDP_MANAGER_ADDRESS as Address],
       },
     ],
     query: { enabled: canReadPosition, refetchInterval: 15_000 },

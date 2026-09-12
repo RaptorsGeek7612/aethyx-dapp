@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAccount } from "wagmi";
-import { TriangleAlert } from "lucide-react";
+import { isAddress, type Address } from "viem";
+import { TriangleAlert, Crosshair } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -169,6 +170,7 @@ function ConnectedConsole() {
       </div>
 
       <CommandConsole refetch={refetch} />
+      <LiquidationConsole />
     </div>
   );
 }
@@ -337,6 +339,104 @@ function CommandConsole({ refetch }: { refetch: () => void }) {
           </Button>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+/**
+ * Anyone can call CDPManager.liquidate on any address once its ratio drops below the threshold —
+ * that permissionlessness is the whole safety mechanism, so the UI needs a way to act on it that
+ * doesn't require going to a block explorer. Looks up an arbitrary address's position and, when
+ * it's actually liquidatable, lets the connected wallet repay its debt and take its collateral.
+ */
+function LiquidationConsole() {
+  const { address: connected } = useAccount();
+  const [target, setTarget] = useState("");
+  const { liquidate, step } = useCdpActions();
+
+  const targetAddress = isAddress(target) ? (target as Address) : undefined;
+  const { data, hasNoDebt, isLoading } = useCdpPosition(COLLATERAL.id, targetAddress);
+
+  const severity = useMemo(
+    () => cdpHealthSeverity(data.ratioBps, NO_DEBT_RATIO, data.minCollateralRatioBps, data.liquidationThresholdBps),
+    [data.ratioBps, data.minCollateralRatioBps, data.liquidationThresholdBps],
+  );
+
+  const busy = step !== "idle";
+  const stepLabel = STEP_LABEL[step];
+  const liquidatable = Boolean(targetAddress) && !hasNoDebt && data.ratioBps < BigInt(data.liquidationThresholdBps);
+
+  return (
+    <div className="hud-panel p-6" style={{ ["--hud-accent" as string]: "var(--status-critical)" }}>
+      <span className="hud-corner-tr" aria-hidden />
+      <span className="hud-corner-bl" aria-hidden />
+
+      <div className="flex items-center gap-2">
+        <Crosshair className="h-4 w-4 text-status-critical" aria-hidden />
+        <h2 className="hud-readout text-sm font-semibold uppercase tracking-[0.08em]">Liquidation console</h2>
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Anyone can close out a position below {(data.liquidationThresholdBps / 100).toFixed(0)}% collateralization —
+        look one up by address.
+      </p>
+
+      <div className="mt-4 space-y-1.5">
+        <Label htmlFor="cdp-liquidate-target" className="hud-readout text-xs">
+          Target address
+        </Label>
+        <Input
+          id="cdp-liquidate-target"
+          placeholder="0x…"
+          value={target}
+          onChange={(event) => setTarget(event.target.value.trim())}
+          disabled={busy}
+          className="hud-readout"
+        />
+      </div>
+
+      {target && !targetAddress && <p className="mt-2 text-xs text-status-critical">Not a valid address.</p>}
+
+      {targetAddress && (
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <Readout
+            label="Collateral"
+            value={formatAmount(data.collateralAmount, data.wrappedDecimals)}
+            unit={data.wrappedSymbol}
+          />
+          <Readout label="Debt" value={formatAmount(data.currentDebt, data.stableDecimals)} unit={data.stableSymbol} />
+          <Readout
+            label="Ratio"
+            value={isLoading ? "…" : formatRatioPct(data.ratioBps, NO_DEBT_RATIO)}
+            unit={severity.label}
+            accent={severity.color}
+          />
+        </div>
+      )}
+
+      <Button
+        className="mt-4 w-full"
+        variant="secondary"
+        disabled={!liquidatable || busy}
+        onClick={async () => {
+          if (!targetAddress) return;
+          await liquidate({
+            collateralId: COLLATERAL.id,
+            user: targetAddress,
+            debtToRepay: data.currentDebt,
+            currentAllowance: data.stableAllowanceForCdp,
+            onSuccess: () => setTarget(""),
+          });
+        }}
+      >
+        {busy
+          ? stepLabel
+          : liquidatable
+            ? `Liquidate for ${formatAmount(data.currentDebt, data.stableDecimals)} ${data.stableSymbol}`
+            : "Position not liquidatable"}
+      </Button>
+      {connected && targetAddress === connected && (
+        <p className="mt-2 text-xs text-muted-foreground">That&apos;s your own address.</p>
+      )}
     </div>
   );
 }
