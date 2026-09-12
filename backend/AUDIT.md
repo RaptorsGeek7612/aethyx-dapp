@@ -1,13 +1,15 @@
 # Audit de sécurité — AETHYX Gateway
 
-**Date** : 11 septembre 2026
-**Périmètre** : les 23 fichiers de `backend/contracts/`, à `c6c1f48`
+**Date** : 11 septembre 2026, étendu le 12 septembre 2026 au module CDP
+**Périmètre** : les 23 fichiers de `backend/contracts/` à `c6c1f48` pour les constats 1 à 7 ; les
+26 fichiers à `078176a` pour les constats 8 et 9, qui ajoutent `CDPManager.sol` et `StableToken.sol`
 **Nature** : revue interne par lecture de code, non une attestation par un tiers indépendant
-**Déploiement examiné** : Sepolia, `VaultManager` `0x63C5bACc…6b53`
+**Déploiement examiné** : Sepolia, `VaultManager` `0x63C5bACc…6b53` — le module CDP n'y est pas
+encore déployé, voir `backend/README.md#module-cdp`
 
 ## Synthèse
 
-| # | Constat | Sévérité | Statut sur Sepolia |
+| # | Constat | Sévérité | Statut |
 |---|---|---|---|
 | 1 | L'échéance immobilière se contourne par auto-transfert | **Élevée** | **Risque accepté** — arbitrage produit assumé |
 | 2 | Frais réglables jusqu'à 100 % | **Moyenne** | Latent (frais à 0) |
@@ -16,10 +18,13 @@
 | 5 | Valeur de retour de `transferFrom` ignorée | **Faible** | Non exploitable en l'état |
 | 6 | `registerAsset` ne vérifie pas la cohérence de l'`assetId` | **Faible** | Non exploitable en l'état |
 | 7 | Les fabriques figent le bytecode de leur adaptateur | **Moyenne** | **Corrigé** — fabrique redéployée, ancienne révoquée |
+| 8 | Liquidation du CDP sans socialisation de la mauvaise dette | **Moyenne à élevée selon paramètres** | **Non traité** — décision produit en attente |
+| 9 | `addCollateralType` ne vérifie pas l'étalon du prix enregistré | **Faible à élevée selon l'erreur** | Latent (aucun collatéral erroné enregistré à ce jour) |
 
 Aucun constat critique. Le constat 1 invalidait une propriété que le protocole annonce ; il est
 corrigé et déployé. Le constat 7, découvert en tentant ce déploiement, expliquait pourquoi deux
-générations de correctifs n'avaient jamais atteint la chaîne.
+générations de correctifs n'avaient jamais atteint la chaîne. Les constats 8 et 9 portent sur le
+module CDP, pas encore déployé : latents par construction, pas encore par chance.
 
 Marché en vigueur : `REAL_ESTATE_PARIS_01_V4`, adaptateur `0x7aE821eb…3700` (6 051 octets, calendrier
 global vérifié par balayage des sélecteurs), fabrique `0xABB4C7D0…71aD`.
@@ -283,6 +288,94 @@ imprime la commande sans l'exécuter — retirer un privilège en production se 
 
 ---
 
+## 8. Liquidation du CDP sans socialisation de la mauvaise dette — **Moyenne à élevée selon paramètres** · décision en attente
+
+**Localisation** : `CDPManager.sol`, `liquidate`
+
+**Description.** La liquidation est totale et immédiate : le liquidateur rembourse `debtRepaid`
+(la dette courante, frais de stabilité inclus) et reçoit `collateralSeized` (tout le collatéral de
+la position), sans aucune vérification que la valeur du second couvre le premier au moment de
+l'exécution.
+
+```solidity
+uint256 debtRepaid = position.debtAmount;
+uint256 collateralSeized = position.collateralAmount;
+// ... aucun contrôle entre les deux lignes ci-dessus et le transfert plus bas
+```
+
+**Scénario.** Une position est ouverte à 200 % de ratio, saine. Le prix du collatéral chute de
+40 % en un seul bloc — un flux Chainlink qui rattrape un décrochage, une source manuelle poussée
+en retard, une volatilité réelle du sous-jacent. La position se retrouve sous le seuil de
+liquidation *et* sous 100 % : le collatéral ne vaut plus la dette qu'il devait garantir. Le premier
+liquidateur à agir rembourse la dette au prix nominal et reçoit un collatéral qui vaut, au marché,
+moins que ce qu'il vient de payer — une perte pour lui, pas pour le protocole, tant qu'il accepte
+de liquider quand même. S'il n'y a aucune incitation à le faire dans ces conditions, personne ne
+liquide : la dette reste ouverte, non couverte, et personne d'autre que son titulaire ne le sait
+avant de tenter d'interagir avec elle.
+
+Le même effet peut naître sans aucun mouvement de prix, purement par l'accumulation du frais de
+stabilité sur une position jamais réglée depuis longtemps (voir `_currentDebt`) — plus lent, mais
+tout aussi silencieux tant que rien n'appelle `_settleAccrual` sur cette position précise.
+
+**Ce qui existe déjà, et ce qui manque.** L'écart entre `minCollateralRatioBps` et
+`liquidationThresholdBps` (150 % / 130 % dans `deploy-cdp.ts`) est la seule marge de sécurité :
+au-delà d'une chute de prix qui la traverse en un seul bloc, rien n'absorbe la différence. Aucun
+mécanisme de `AETHYX` — ni Treasury, ni un fonds dédié, ni une réduction proportionnelle de la
+dette des autres positions du même collatéral — ne socialise une perte qui dépasserait cette marge.
+
+**Recommandation.** Trois directions, non exclusives :
+
+- **Fonds d'assurance.** Affecter tout ou partie du frais de stabilité déjà perçu par le Treasury
+  (voir `_settleAccrual`) à une réserve dédiée, mobilisable pour compléter un liquidateur dont le
+  collatéral reçu ne couvre pas la dette remboursée — le mécanisme de MakerDAO/Liquity le plus
+  courant, et celui qui demande le moins de changement : le frais de stabilité existe déjà.
+- **Socialisation directe.** Répartir la perte non couverte sur `totalDebt` du même collatéral,
+  au prorata des positions restantes — plus simple à raisonner, mais fait porter le risque d'une
+  position aux autres emprunteurs du même marché sans qu'ils l'aient choisi.
+- **Accepter et documenter.** Si le protocole reste à l'échelle d'une démonstration avec des
+  plafonds de dette bas (`debtCeiling`), le risque réel est petit et peut rester assumé — mais
+  alors il faut le dire dans l'interface, pas seulement ici.
+
+**Statut.** Aucune des trois directions n'a été retenue : c'est un arbitrage produit, pas un bug
+à corriger, et il n'a pas encore été tranché. Consigné ici pour qu'il ne soit ni oublié ni pris
+pour un oubli.
+
+---
+
+## 9. `addCollateralType` ne vérifie pas l'étalon du prix enregistré — **Faible à élevée selon l'erreur**
+
+**Localisation** : `CDPManager.sol`, `addCollateralType`
+
+**Description.** Rien n'empêche d'enregistrer un `collateralId` dont le prix, dans
+`OracleManager`, est libellé dans un étalon différent de la parité nominale du stablecoin — le
+piège que le README documente déjà pour `GOLD` (euros par gramme) contre `GOLD_USD_OZ` (dollars
+par once). La natspec de la fonction met en garde contre cette erreur, mais aucune ligne de code
+ne la rend impossible. C'est exactement le même défaut de conception que le constat 6
+(`registerAsset` ne vérifie pas la cohérence de l'`assetId`) : un invariant critique, réel, mais
+seulement documenté, jamais imposé.
+
+**Scénario.** Un administrateur enregistre par erreur `GOLD_USD_OZ` comme collatéral au lieu de
+`GOLD`, en réutilisant le mauvais identifiant lors d'une intégration Chainlink pressée. La valeur
+en dollars par once est plus de trente fois la valeur en euros par gramme : chaque position ouverte
+sur ce collatéral paraît alors surcollatéralisée d'un facteur du même ordre. Un emprunteur qui
+comprend l'écart peut emprunter bien au-delà de ce que son collatéral vaut réellement, jusqu'à ce
+que quelqu'un s'en aperçoive.
+
+**Recommandation.** Contrairement au constat 6, il n'existe rien d'équivalent à
+`AssetAdapter.assetId()` à comparer on-chain : l'étalon d'un prix n'est pas une donnée que
+`OracleManager` connaît de lui-même. La garde ne peut donc pas être purement on-chain ; elle doit
+être un contrôle de processus au moment du déploiement — un script qui, avant d'appeler
+`addCollateralType`, relit le prix courant du `collateralId` visé et le fait confirmer
+explicitement par l'opérateur (par exemple, en l'affichant en clair : *« 92,40 — confirmez qu'il
+s'agit bien d'euros par gramme »*), sur le modèle de ce que
+`scripts/deploy-real-estate-market.ts` fait déjà pour vérifier le bytecode d'une fabrique avant
+d'écrire quoi que ce soit.
+
+**Statut.** Latent : `deploy-cdp.ts` n'enregistre à ce jour que `GOLD`, dont le prix est bien en
+euros par gramme.
+
+---
+
 ## Ce qui a été examiné et jugé sain
 
 - **Invariant de couverture.** Au dépôt, `normalizedAmount` est verrouillé et exactement autant
@@ -306,6 +399,17 @@ imprime la commande sans l'exécuter — retirer un privilège en production se 
 - **Échéancier immobilier.** Chaque dépôt porte sa propre échéance, balayée de la plus ancienne à
   la plus récente via un curseur — un dépôt tardif ne repousse jamais un dépôt antérieur. Correct
   en soi ; c'est le contrôle d'accès au rachat qui pose problème (constat 1).
+- **Règlement du frais de stabilité.** `_settleAccrual` est appelé en tout premier dans
+  `depositCollateral`, `withdrawCollateral`, `mintDebt`, `repayDebt` et `liquidate` : aucune de ces
+  fonctions ne peut lire ni modifier une dette périmée, et `_collateralRatioBps` recalcule le frais
+  couru à la volée pour les lectures pures (`collateralRatioBps`, `currentDebt`), sans jamais avoir
+  besoin d'un appel séparé pour rester à jour. Le test `test_AccruedStabilityFeeCanTriggerLiquidation`
+  vérifie que ce couru seul, sans aucun mouvement de prix, peut faire passer une position sous le
+  seuil de liquidation — le comportement voulu, pas un effet de bord.
+- **Séparation des rôles de frappe.** `MINTER_ROLE` (VaultManager) et `DEBT_MINTER_ROLE`
+  (CDPManager) sont deux rôles distincts plutôt qu'un seul partagé, précisément pour que
+  l'invariant de couverture de VaultManager et celui de dette de CDPManager restent chacun
+  vérifiable indépendamment de l'autre contrat.
 
 ## Risques de centralisation
 
