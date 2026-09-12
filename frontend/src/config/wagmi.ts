@@ -60,7 +60,11 @@ const includeLocalChain = process.env.NODE_ENV !== "production";
 export const wagmiConfig = includeLocalChain
   ? createConfig({
       connectors,
-      chains: [hardhat, sepolia],
+      // Sepolia first: wagmi reads from chains[0] when no wallet is connected, and this app's
+      // Sepolia deployment is what every disconnected view (oracle status, coverage) reads from.
+      // Hardhat last so a wallet explicitly switched to it still works, without becoming the
+      // default and sending every disconnected read to an 127.0.0.1:8545 that usually isn't running.
+      chains: [sepolia, hardhat],
       transports: {
         [hardhat.id]: http(),
         [sepolia.id]: sepoliaTransport,
