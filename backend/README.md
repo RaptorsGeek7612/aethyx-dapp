@@ -1,6 +1,6 @@
-# Invest'Or Gateway — backend
+# AETHYX Gateway — backend
 
-Contrats Solidity, tests et modules de déploiement Hardhat 3 Ignition du protocole Invest'Or
+Contrats Solidity, tests et modules de déploiement Hardhat 3 Ignition du protocole AETHYX
 Gateway. Voir le [README racine](../README.md) pour l'architecture complète et le « pourquoi » au
 niveau protocole. Ce fichier-ci couvre le travail quotidien dans ce répertoire.
 
@@ -49,7 +49,7 @@ Les quatre s'exécutent en CI à chaque push et chaque PR — voir
 | Contrat | Rôle |
 |---|---|
 | `AccessManager` | Registre `AccessControl` central — tous les autres contrats y vérifient leurs rôles au lieu de gérer les leurs. |
-| `InvestOrGateway` | Point d'entrée unique côté utilisateur (`deposit`/`redeem`). Ne détient aucun fonds ; transmet `msg.sender` tel quel à `VaultManager`. |
+| `AethyxGateway` | Point d'entrée unique côté utilisateur (`deposit`/`redeem`). Ne détient aucun fonds ; transmet `msg.sender` tel quel à `VaultManager`. |
 | `VaultManager` | Chef d'orchestre. Enregistre les adaptateurs d'actifs, applique les frais, émet et brûle les tokens wrappés. Invariant : l'offre wrappée égale toujours la valeur verrouillée. Protégé par `Pausable` + `ReentrancyGuard`. |
 | `AssetAdapter` (+ `GoldAdapter`, `SilverAdapter`, `RealEstateAdapter`) | Prend en garde un actif ERC-3643, exécute les contrôles de conformité préalables, normalise les décimales à 18. |
 | `*AssetFactory` (Gold/Silver/RealEstate) | Déploie ensemble un couple adaptateur + ERC-20 wrappé et l'enregistre auprès de `VaultManager`. Une fabrique par classe d'actif : une fabrique unique embarquant le bytecode de tous les adaptateurs dépassait la limite de taille EIP-170. |
@@ -85,7 +85,7 @@ constat n°1.
 
 ```shell
 npx hardhat node                                                   # dans un terminal séparé
-npx hardhat ignition deploy ignition/modules/InvestOrGateway.ts --network localhost
+npx hardhat ignition deploy ignition/modules/AethyxGateway.ts --network localhost
 npx hardhat run scripts/seed-demo-assets.ts --network localhost    # amorce les actifs de démo
 ```
 
@@ -113,7 +113,7 @@ terminal, il ne passera pas dans un shell non interactif ni en CI. En CI, utilis
 d'environnement.
 
 ```shell
-npx hardhat ignition deploy ignition/modules/InvestOrGateway.ts --network sepolia
+npx hardhat ignition deploy ignition/modules/AethyxGateway.ts --network sepolia
 SEED_NETWORK=sepolia npx hardhat run scripts/seed-demo-assets.ts --network sepolia
 ```
 
@@ -194,7 +194,7 @@ Revue de sécurité complète des contrats : [`AUDIT.md`](AUDIT.md).
 
 - L'`initialAdmin` d'`AccessManager` devrait être un multisig ou un timelock en production, jamais
   un simple EOA : il peut accorder et révoquer tous les rôles, y compris le sien.
-- `ROUTER_ROLE` (détenu par le seul `InvestOrGateway`, puis verrouillé définitivement via
+- `ROUTER_ROLE` (détenu par le seul `AethyxGateway`, puis verrouillé définitivement via
   `lockRouterRole`) est pleinement présumé ne transmettre que son propre `msg.sender` immédiat —
   ne jamais l'accorder à quoi que ce soit susceptible de transmettre une adresse tierce arbitraire.
 - Ceci est du code de démonstration et de testnet (`MockERC3643`, `ManualPriceSource`) — non

@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Invest'Or Gateway",
+  title: "AETHYX Gateway",
   description: "Wrap real-world ERC-3643 assets into freely-transferable ERC-20 tokens.",
 };
 

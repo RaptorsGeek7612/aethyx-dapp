@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 
-// Filled in after running `hardhat ignition deploy ignition/modules/InvestOrGateway.ts`
+// Filled in after running `hardhat ignition deploy ignition/modules/AethyxGateway.ts`
 // against whichever network the frontend is pointed at (see frontend/.env.local.example).
 // Left unset, the UI still renders but flags itself as "not configured" instead of crashing.
 export const GATEWAY_ADDRESS = (process.env.NEXT_PUBLIC_GATEWAY_ADDRESS ?? "") as Address | "";
@@ -19,6 +19,13 @@ export const PRICE_SOURCE_ADDRESSES = rawPriceSources
 
 export const isContractsConfigured = Boolean(GATEWAY_ADDRESS && VAULT_MANAGER_ADDRESS);
 export const isOracleConfigured = Boolean(ORACLE_MANAGER_ADDRESS && PRICE_SOURCE_ADDRESSES.length > 0);
+
+// The CDP module (StableToken + CDPManager) is deployed separately from the core protocol above —
+// see backend/scripts/deploy-cdp.ts — so it gets its own addresses and its own configured flag
+// rather than folding into isContractsConfigured.
+export const CDP_MANAGER_ADDRESS = (process.env.NEXT_PUBLIC_CDP_MANAGER_ADDRESS ?? "") as Address | "";
+export const STABLE_TOKEN_ADDRESS = (process.env.NEXT_PUBLIC_STABLE_TOKEN_ADDRESS ?? "") as Address | "";
+export const isCdpConfigured = Boolean(CDP_MANAGER_ADDRESS && STABLE_TOKEN_ADDRESS);
 
 // The block this deployment's contracts were created at, if known — every getLogs scan (price
 // history, transaction history) starts here instead of the chain's genesis block. Without this,

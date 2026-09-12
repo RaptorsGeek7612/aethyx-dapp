@@ -46,9 +46,9 @@ export function MyDeposits({
   const maturityOf = (index: number) => (index >= firstLockedIndex ? tranches[index - firstLockedIndex] : undefined);
 
   return (
-    <div className="glass-card glass-card-hover rounded-xl p-4">
+    <div className="panel p-4">
       <div className="flex items-baseline justify-between">
-        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">My deposits</p>
+        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">My deposits</p>
         <p className="text-[11px] text-muted-foreground">
           {positions.length} {positions.length === 1 ? "deposit" : "deposits"}
         </p>
@@ -81,20 +81,20 @@ export function MyDeposits({
                 spent ? "text-muted-foreground line-through decoration-1" : ""
               }`}
             >
-              <span className="w-5 shrink-0 tabular-nums opacity-50">#{position.number}</span>
+              <span className="num w-5 shrink-0 opacity-50">#{position.number}</span>
 
-              <span className="flex-1 truncate tabular-nums">
+              <span className="num flex-1 truncate">
                 {formatAmount(position.remaining, 18)} / {formatAmount(position.received, 18)} {symbol}
               </span>
 
               {!spent &&
                 (locked ? (
-                  <span className="flex shrink-0 items-center gap-1 text-amber-400/90">
+                  <span className="flex shrink-0 items-center gap-1 text-status-warning">
                     <Lock className="h-3 w-3" aria-hidden />
-                    <span className="tabular-nums">{formatCountdown(maturity.unlockAt, nowSeconds)}</span>
+                    <span className="num">{formatCountdown(maturity.unlockAt, nowSeconds)}</span>
                   </span>
                 ) : (
-                  <span className="flex shrink-0 items-center gap-1 text-emerald-400/90">
+                  <span className="flex shrink-0 items-center gap-1 text-status-good">
                     <Unlock className="h-3 w-3" aria-hidden />
                     redeemable
                   </span>
@@ -104,9 +104,9 @@ export function MyDeposits({
         })}
       </motion.div>
 
-      <div className="mt-2 flex justify-between border-t border-white/5 pt-2 text-xs font-medium">
+      <div className="mt-2 flex justify-between border-t border-hairline pt-2 text-xs font-medium">
         <span>{open.length === positions.length ? "Total" : `Total across ${open.length} open`}</span>
-        <span className="tabular-nums">
+        <span className="num">
           {formatAmount(totalRemaining, 18)} {symbol}
         </span>
       </div>

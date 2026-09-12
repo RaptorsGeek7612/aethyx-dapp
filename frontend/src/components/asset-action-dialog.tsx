@@ -168,7 +168,7 @@ export function AssetActionForm({ asset }: { asset: AssetDefinition }) {
               />
             </div>
 
-            <div className="space-y-1 rounded-lg border border-white/5 bg-black/20 p-3 text-xs text-muted-foreground">
+            <div className="panel space-y-1 p-3 text-xs text-muted-foreground">
               <div className="flex justify-between">
                 <span>Protocol fee ({(data.depositFeeBps / 100).toFixed(2)}%)</span>
                 <span>
@@ -211,7 +211,7 @@ export function AssetActionForm({ asset }: { asset: AssetDefinition }) {
               />
             </div>
 
-            <div className="space-y-1 rounded-lg border border-white/5 bg-black/20 p-3 text-xs text-muted-foreground">
+            <div className="panel space-y-1 p-3 text-xs text-muted-foreground">
               <div className="flex justify-between">
                 <span>Protocol fee ({(data.redeemFeeBps / 100).toFixed(2)}%)</span>
                 <span>
@@ -258,16 +258,14 @@ function MyHoldingSummary({
   const { grams, valueEur } = computeValuation(asset, data, price);
 
   return (
-    <div className="rounded-xl border border-white/5 bg-black/20 p-4">
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">My portfolio</p>
+    <div className="panel p-4">
+      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">My portfolio</p>
       <div className="mt-1 flex items-baseline justify-between">
-        <p className="text-2xl font-semibold tracking-tight">
+        <p className="num-display text-2xl font-semibold">
           {formatAmount(data.wrappedBalance, data.wrappedDecimals)} {data.wrappedSymbol}
         </p>
         {changeBps !== null && (
-          <span
-            className={`flex items-center gap-0.5 text-xs font-medium ${changeBps >= 0n ? "text-emerald-400" : "text-red-400"}`}
-          >
+          <span className={`pill ${changeBps >= 0n ? "pill-up" : "pill-down"}`}>
             {changeBps >= 0n ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
             {(Number(changeBps) / 100).toFixed(2)}% today
           </span>
@@ -278,7 +276,7 @@ function MyHoldingSummary({
           {grams.toLocaleString(undefined, { maximumFractionDigits: 1 })} grams
         </p>
       )}
-      <p className="mt-1 text-lg font-medium text-primary">
+      <p className="num-display mt-1 text-lg font-medium text-primary">
         {valueEur.toLocaleString(undefined, { style: "currency", currency: "EUR", maximumFractionDigits: 0 })}
       </p>
       {asset.pricedByOracle && (

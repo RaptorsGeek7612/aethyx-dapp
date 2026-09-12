@@ -15,7 +15,7 @@ import { VaultManager } from "./VaultManager.sol";
 ///         lui-même (pour les rachats), exactement comme pour un appel direct — jamais ce
 ///         contrat. Parce qu'il ne détient jamais le token ERC-3643, ce contrat n'a PAS besoin
 ///         d'être inscrit comme identité vérifiée auprès de l'émetteur du token.
-contract InvestOrGateway is AccessManaged, Pausable {
+contract AethyxGateway is AccessManaged, Pausable {
     /// @notice VaultManager vers lequel tous les appels sont relayés.
     VaultManager public immutable vaultManager;
 

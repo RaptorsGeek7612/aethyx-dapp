@@ -15,7 +15,7 @@ async function deployProtocolFixture() {
   const treasury = await ethers.deployContract("Treasury", [accessManager.target]);
   const vaultManager = await ethers.deployContract("VaultManager", [accessManager.target, treasury.target]);
   const factory = await ethers.deployContract("GoldAssetFactory", [accessManager.target, vaultManager.target]);
-  const gateway = await ethers.deployContract("InvestOrGateway", [accessManager.target, vaultManager.target]);
+  const gateway = await ethers.deployContract("AethyxGateway", [accessManager.target, vaultManager.target]);
 
   await accessManager.grantRole(await accessManager.MINTER_ROLE(), vaultManager.target);
   await accessManager.grantRole(await accessManager.FACTORY_ROLE(), factory.target);
@@ -27,7 +27,7 @@ async function deployProtocolFixture() {
 
   await factory
     .connect(admin)
-    .deployGoldAsset(GOLD_ASSET_ID, "Invest'Or Gold", "GLD", goldToken.target, 0n, DEPOSIT_FEE_BPS, REDEEM_FEE_BPS);
+    .deployGoldAsset(GOLD_ASSET_ID, "AETHYX Gold", "GLD", goldToken.target, 0n, DEPOSIT_FEE_BPS, REDEEM_FEE_BPS);
 
   const assetConfig = await vaultManager.assets(GOLD_ASSET_ID);
   const goldAdapter = await ethers.getContractAt("GoldAdapter", assetConfig.adapter);
@@ -57,7 +57,7 @@ async function deployProtocolFixture() {
   };
 }
 
-describe("Invest'Or Gateway — gold wrap end to end", function () {
+describe("AETHYX Gateway — gold wrap end to end", function () {
   it("deposits and redeems directly through VaultManager, preserving the 1:1 invariant", async function () {
     const { alice, vaultManager, treasury, goldToken, goldAdapter, gldToken } =
       await networkHelpers.loadFixture(deployProtocolFixture);

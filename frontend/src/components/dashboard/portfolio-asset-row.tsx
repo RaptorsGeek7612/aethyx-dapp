@@ -45,7 +45,7 @@ export function PortfolioAssetRow({
   const grams = asset.kind !== "real-estate" ? Number(data.wrappedBalance) / 10 ** data.wrappedDecimals : null;
 
   return (
-    <div className="border-b border-white/5 py-3 last:border-0">
+    <div className="rule py-3">
       <div className="flex items-center gap-4 px-1">
         <div
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${KIND_META[asset.kind].gradient}`}
@@ -63,16 +63,14 @@ export function PortfolioAssetRow({
 
         <div className="hidden text-right sm:block">
           {isConnected ? (
-            <p className="text-sm font-semibold tabular-nums">
+            <p className="num text-sm font-semibold">
               {valueEur.toLocaleString(undefined, { style: "currency", currency: "EUR", maximumFractionDigits: 0 })}
             </p>
           ) : (
             <Skeleton className="ml-auto h-4 w-16" />
           )}
           {changeBps !== null && (
-            <p
-              className={`flex items-center justify-end gap-0.5 text-xs ${changeBps >= 0n ? "text-emerald-400" : "text-red-400"}`}
-            >
+            <p className={`pill mt-1 ${changeBps >= 0n ? "pill-up" : "pill-down"}`}>
               {changeBps >= 0n ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
               {(Number(changeBps) / 100).toFixed(2)}%
             </p>

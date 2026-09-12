@@ -18,7 +18,7 @@ export default function ReservePage() {
             from the two on-chain numbers that make that true — it can&apos;t drift, lag, or be misreported.
           </p>
 
-          <div className="mt-5 flex max-w-2xl items-start gap-2.5 rounded-xl border border-white/5 bg-black/20 p-3.5 text-xs text-muted-foreground">
+          <div className="panel mt-5 flex max-w-2xl items-start gap-2.5 p-3.5 text-xs text-muted-foreground">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <p>
               <strong className="text-foreground">Coverage</strong> is cryptographically verifiable on-chain: it
@@ -36,8 +36,8 @@ export default function ReservePage() {
         <ReserveGrid />
       </main>
 
-      <footer className="border-t border-white/5 py-6 text-center text-xs text-muted-foreground">
-        Invest&apos;Or Gateway — every wrapped token is backed 1:1 by collateral locked on-chain.
+      <footer className="border-t border-hairline py-6 text-center text-xs text-muted-foreground">
+        AETHYX Gateway — every wrapped token is backed 1:1 by collateral locked on-chain.
       </footer>
     </div>
   );

@@ -21,7 +21,7 @@ async function deploySilverFixture() {
 
   await factory
     .connect(admin)
-    .deploySilverAsset(SILVER_ASSET_ID, "Invest'Or Silver", "SLD", silverToken.target, 0n, 0n, 0n);
+    .deploySilverAsset(SILVER_ASSET_ID, "AETHYX Silver", "SLD", silverToken.target, 0n, 0n, 0n);
 
   const assetConfig = await vaultManager.assets(SILVER_ASSET_ID);
   const silverAdapter = await ethers.getContractAt("SilverAdapter", assetConfig.adapter);

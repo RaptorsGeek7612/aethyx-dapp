@@ -1,6 +1,6 @@
-# Invest'Or Gateway — frontend
+# AETHYX Gateway — frontend
 
-dApp Next.js pour envelopper et racheter les classes d'actifs d'Invest'Or Gateway, et consulter
+dApp Next.js pour envelopper et racheter les classes d'actifs d'AETHYX Gateway, et consulter
 en direct les données de réserve et d'oracle. Voir le [README racine](../README.md) pour
 l'architecture du protocole auquel cette interface s'adresse.
 

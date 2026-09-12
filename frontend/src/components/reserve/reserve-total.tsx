@@ -32,9 +32,9 @@ export function ReserveTotal() {
         <ReserveValueReporter key={asset.id} asset={asset} onValue={handleValue} />
       ))}
 
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Total reserve value</p>
+      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Total reserve value</p>
       {haveAllValues ? (
-        <p className="mt-1 text-4xl font-semibold tracking-tight tabular-nums">
+        <p className="text-ink num-live mt-1 text-5xl font-semibold">
           {total.toLocaleString(undefined, { style: "currency", currency: "EUR", maximumFractionDigits: 0 })}
         </p>
       ) : (
@@ -42,7 +42,7 @@ export function ReserveTotal() {
       )}
 
       {degraded ? (
-        <p className="mt-2 flex items-center gap-1.5 text-xs text-amber-400">
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-status-warning">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
           The gold and/or silver price feed has too few fresh sources right now — the total above excludes them until
           the oracle recovers, so it under-states actual reserve value.

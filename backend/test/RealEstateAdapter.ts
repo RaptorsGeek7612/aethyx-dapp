@@ -13,7 +13,7 @@ async function deployRealEstateFixture() {
   const treasury = await ethers.deployContract("Treasury", [accessManager.target]);
   const vaultManager = await ethers.deployContract("VaultManager", [accessManager.target, treasury.target]);
   const factory = await ethers.deployContract("RealEstateAssetFactory", [accessManager.target, vaultManager.target]);
-  const gateway = await ethers.deployContract("InvestOrGateway", [accessManager.target, vaultManager.target]);
+  const gateway = await ethers.deployContract("AethyxGateway", [accessManager.target, vaultManager.target]);
 
   await accessManager.grantRole(await accessManager.MINTER_ROLE(), vaultManager.target);
   await accessManager.grantRole(await accessManager.FACTORY_ROLE(), factory.target);
@@ -26,7 +26,7 @@ async function deployRealEstateFixture() {
     .connect(admin)
     .deployRealEstateAsset(
       REAL_ESTATE_ASSET_ID,
-      "Invest'Or Real Estate",
+      "AETHYX Real Estate",
       "RLD",
       propertyToken.target,
       LOCKUP_PERIOD,

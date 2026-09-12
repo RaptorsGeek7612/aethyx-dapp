@@ -24,7 +24,7 @@ const connectors = connectorsForWallets(
       wallets: [metaMaskWallet, walletConnectWallet, rainbowWallet, injectedWallet],
     },
   ],
-  { appName: "Invest'Or Gateway", projectId },
+  { appName: "AETHYX Gateway", projectId },
 );
 
 // Not wagmi/viem's own bundled default (thirdweb's public endpoint) — that one advertises a

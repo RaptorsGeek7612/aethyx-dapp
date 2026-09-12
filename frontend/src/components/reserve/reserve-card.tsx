@@ -31,7 +31,7 @@ export function ReserveCard({ asset, index }: { asset: AssetDefinition; index: n
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.08, ease: "easeOut" }}
-      className="glass-card rounded-2xl p-6"
+      className="glass-card glass-card-hover rounded-2xl p-6"
     >
       <div className="flex items-center gap-3">
         <div
@@ -41,7 +41,7 @@ export function ReserveCard({ asset, index }: { asset: AssetDefinition; index: n
         </div>
         <div>
           <h3 className="text-sm font-semibold">{asset.title}</h3>
-          <p className="text-xs text-muted-foreground">{data.registered ? data.wrappedSymbol : asset.label}</p>
+          <p className="num text-xs text-muted-foreground">{data.registered ? data.wrappedSymbol : asset.label}</p>
         </div>
       </div>
 

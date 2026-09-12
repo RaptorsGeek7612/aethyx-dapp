@@ -1,4 +1,4 @@
-# Audit de sécurité — Invest'Or Gateway
+# Audit de sécurité — AETHYX Gateway
 
 **Date** : 11 septembre 2026
 **Périmètre** : les 23 fichiers de `backend/contracts/`, à `c6c1f48`
@@ -292,7 +292,7 @@ imprime la commande sans l'exécuter — retirer un privilège en production se 
 - **Réentrance.** `deposit`, `depositFor`, `redeem` et `redeemFor` portent `nonReentrant`, et
   `ReentrantERC3643` exerce les deux chemins de rappel — au `transferFrom` du dépôt comme au
   `transfer` du retrait. Les deux tests passent.
-- **`ROUTER_ROLE`.** Accordé au seul `InvestOrGateway`, puis définitivement figé par
+- **`ROUTER_ROLE`.** Accordé au seul `AethyxGateway`, puis définitivement figé par
   `lockRouterRole` qui pointe son administration vers un rôle sans membre. Le périmètre de
   confiance ne peut plus s'élargir après déploiement. Le Gateway transmet `msg.sender` sans jamais
   prendre la garde des tokens, et n'a donc pas besoin d'être inscrit sur liste blanche ERC-3643.
@@ -301,7 +301,7 @@ imprime la commande sans l'exécuter — retirer un privilège en production se 
 - **Agrégation de prix.** Médiane sur sources fraîches, quorum minimal, filtre de dispersion,
   exclusion des sources en échec. Une source morte ne bloque pas l'agrégation (voir le constat 4
   pour la seule brèche).
-- **Pause.** `VaultManager` et `InvestOrGateway` se gèlent indépendamment ; les deux comportements
+- **Pause.** `VaultManager` et `AethyxGateway` se gèlent indépendamment ; les deux comportements
   sont testés.
 - **Échéancier immobilier.** Chaque dépôt porte sa propre échéance, balayée de la plus ancienne à
   la plus récente via un curseur — un dépôt tardif ne repousse jamais un dépôt antérieur. Correct

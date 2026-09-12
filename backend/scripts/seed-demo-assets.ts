@@ -3,7 +3,7 @@ import { network } from "hardhat";
 
 // Deploys demo MockERC3643 tokens for Gold/Silver/Real Estate, registers them via the asset
 // factories, whitelists the relevant addresses, and mints demo balances — everything the core
-// InvestOrGateway Ignition module deliberately leaves out (it only deploys protocol
+// AethyxGateway Ignition module deliberately leaves out (it only deploys protocol
 // infrastructure, never demo assets/data). Run after `hardhat ignition deploy` against the
 // same network: `hardhat run scripts/seed-demo-assets.ts --network localhost`.
 // Set SEED_NETWORK to target a different network (e.g. `sepolia`) already deployed via Ignition.
@@ -74,8 +74,8 @@ async function seedMetal(
   console.log(label, "admin whitelisted and funded with 2000", tokenSymbol);
 }
 
-await seedMetal("GOLD", "Tokenized Gold", "tGOLD", "Invest'Or Gold", "GLD");
-await seedMetal("SILVER", "Tokenized Silver", "tSLV", "Invest'Or Silver", "SLD");
+await seedMetal("GOLD", "Tokenized Gold", "tGOLD", "AETHYX Gold", "GLD");
+await seedMetal("SILVER", "Tokenized Silver", "tSLV", "AETHYX Silver", "SLD");
 
 const realEstateAssetId = ethers.id("REAL_ESTATE_PARIS_01");
 const existingRealEstate = await vaultManager.assets(realEstateAssetId);
@@ -89,7 +89,7 @@ if (existingRealEstate.adapter !== ethers.ZeroAddress) {
     .connect(admin)
     .deployRealEstateAsset(
       realEstateAssetId,
-      "Invest'Or Real Estate",
+      "AETHYX Real Estate",
       "RLD",
       propertyToken.target,
       90n * 24n * 60n * 60n,

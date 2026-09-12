@@ -24,7 +24,7 @@ async function deployGoldFixtureWithDecimals(underlyingDecimals: number) {
 
   const goldToken = await ethers.deployContract("MockERC3643", ["Tokenized Gold", "tGOLD", underlyingDecimals]);
 
-  await factory.connect(admin).deployGoldAsset(GOLD_ASSET_ID, "Invest'Or Gold", "GLD", goldToken.target, 0n, 0n, 0n);
+  await factory.connect(admin).deployGoldAsset(GOLD_ASSET_ID, "AETHYX Gold", "GLD", goldToken.target, 0n, 0n, 0n);
 
   const assetConfig = await vaultManager.assets(GOLD_ASSET_ID);
   const goldAdapter = await ethers.getContractAt("GoldAdapter", assetConfig.adapter);

@@ -7,7 +7,7 @@ const { ethers, networkHelpers } = await network.create();
  * ROUTER_ROLE — périmètre de confiance figé.
  *
  * VaultManager.depositFor/redeemFor font confiance à leur appelant pour dire *qui* est
- * l'utilisateur (voir VaultManager.sol). InvestOrGateway mérite cette confiance : il ne
+ * l'utilisateur (voir VaultManager.sol). AethyxGateway mérite cette confiance : il ne
  * transmet jamais que son propre msg.sender. Mais rien, dans AccessControl vanilla,
  * n'empêche DEFAULT_ADMIN_ROLE d'accorder ROUTER_ROLE à un second contrat qui, lui,
  * passerait une adresse arbitraire — la faille n'est pas dans le Gateway, elle est dans le
@@ -24,7 +24,7 @@ describe("AccessManager — ROUTER_ROLE figé après déploiement", () => {
     const accessManager = await ethers.deployContract("AccessManager", [admin.address]);
     const treasury = await ethers.deployContract("Treasury", [accessManager.target]);
     const vaultManager = await ethers.deployContract("VaultManager", [accessManager.target, treasury.target]);
-    const gateway = await ethers.deployContract("InvestOrGateway", [accessManager.target, vaultManager.target]);
+    const gateway = await ethers.deployContract("AethyxGateway", [accessManager.target, vaultManager.target]);
 
     await accessManager.lockRouterRole(gateway.target);
 

@@ -178,7 +178,7 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
 
     /// @notice Identique à `deposit`, mais tire depuis `depositor` et émet vers lui plutôt que
     ///         vers msg.sender.
-    /// @dev Réservé à ROUTER_ROLE, détenu par le seul InvestOrGateway. C'est ce qui permet au
+    /// @dev Réservé à ROUTER_ROLE, détenu par le seul AethyxGateway. C'est ce qui permet au
     ///      Gateway de relayer un dépôt pour le compte de son propre appelant sans jamais
     ///      prendre lui-même la garde du token ERC-3643 : `depositor` doit toujours avoir
     ///      approuvé directement l'adaptateur de l'actif, exactement comme pour un appel

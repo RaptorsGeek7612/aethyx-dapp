@@ -27,7 +27,7 @@ export function TransactionHistory() {
 
   return (
     <div className="glass-card rounded-2xl p-6">
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Activity</p>
+      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Activity</p>
 
       {!isConnected ? (
         <p className="mt-3 text-sm text-muted-foreground">
@@ -39,7 +39,7 @@ export function TransactionHistory() {
           <Skeleton className="h-12 w-full" />
         </div>
       ) : isError ? (
-        <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/20 p-3 text-sm text-muted-foreground">
+        <div className="panel mt-3 flex items-center justify-between gap-3 p-3 text-sm text-muted-foreground">
           <span>Couldn&apos;t load activity — the RPC endpoint didn&apos;t respond in time.</span>
           <Button size="sm" variant="outline" onClick={() => refetch()}>
             Retry
@@ -48,18 +48,18 @@ export function TransactionHistory() {
       ) : entries.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">No deposits or redemptions yet.</p>
       ) : (
-        <div className="mt-3 divide-y divide-white/5">
+        <div className="mt-3 divide-y divide-hairline">
           {entries.map((entry) => (
             <a
               key={entry.transactionHash}
               href={`${SEPOLIA_EXPLORER_TX}${entry.transactionHash}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 py-3 text-sm transition-colors hover:bg-white/5"
+              className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-3 text-sm transition-colors duration-(--dur-fast) hover:bg-hairline"
             >
               <div
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                  entry.type === "deposit" ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/15 text-amber-400"
+                className={`panel flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                  entry.type === "deposit" ? "text-primary" : "text-muted-foreground"
                 }`}
               >
                 {entry.type === "deposit" ? (

@@ -3,9 +3,9 @@ pragma solidity 0.8.35;
 
 import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
 
-/// @notice Registre central des rôles pour l'ensemble du protocole Invest'Or Gateway.
+/// @notice Registre central des rôles pour l'ensemble du protocole AETHYX Gateway.
 /// @dev Tous les autres contrats (VaultManager, GLDToken, OracleManager, Treasury, les
-///      fabriques d'actifs, InvestOrGateway, les adaptateurs d'actifs) détiennent une
+///      fabriques d'actifs, AethyxGateway, les adaptateurs d'actifs) détiennent une
 ///      référence immuable vers ce contrat et y vérifient les rôles via AccessManaged, au lieu
 ///      de gérer chacun son propre AccessControl. Les permissions peuvent ainsi être
 ///      accordées, révoquées ou permutées pour tout le protocole depuis un point unique.
@@ -25,15 +25,26 @@ contract AccessManager is AccessControl {
     bytes32 public constant TREASURY_MANAGER_ROLE = keccak256("TREASURY_MANAGER_ROLE");
 
     /// @notice Permet de mettre en pause ou de réactiver les points d'entrée utilisateur
-    ///         (Gateway, VaultManager).
+    ///         (Gateway, VaultManager, CDPManager).
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+
+    /// @notice Permet d'enregistrer un type de collatéral dans CDPManager et d'en ajuster les
+    ///         paramètres de risque (ratio minimal, seuil de liquidation, plafond d'emprunt).
+    bytes32 public constant RISK_MANAGER_ROLE = keccak256("RISK_MANAGER_ROLE");
+
+    /// @notice Détenu exclusivement par CDPManager ; autorise l'émission et la destruction du
+    ///         stablecoin de dette. Distinct de MINTER_ROLE (réservé à VaultManager) pour que
+    ///         chacun des deux invariants — offre wrappée == collatéral verrouillé d'un côté,
+    ///         dette émise == dette due de l'autre — reste vérifiable sans dépendre de l'autre
+    ///         contrat.
+    bytes32 public constant DEBT_MINTER_ROLE = keccak256("DEBT_MINTER_ROLE");
 
     /// @notice Détenu par chaque fabrique d'actifs (GoldAssetFactory, SilverAssetFactory,
     ///         RealEstateAssetFactory...) ; autorise l'enregistrement de nouveaux adaptateurs
     ///         et tokens.
     bytes32 public constant FACTORY_ROLE = keccak256("FACTORY_ROLE");
 
-    /// @notice Détenu exclusivement par InvestOrGateway ; lui permet d'appeler les
+    /// @notice Détenu exclusivement par AethyxGateway ; lui permet d'appeler les
     ///         depositFor/redeemFor de VaultManager pour le compte de son propre appelant. Ne
     ///         jamais l'accorder à quoi que ce soit susceptible de transmettre une adresse
     ///         autre que son propre msg.sender immédiat — c'est ce rôle qui permet à
@@ -62,12 +73,12 @@ contract AccessManager is AccessControl {
     /// @notice Configuration unique : accorde ROUTER_ROLE à `gateway`, puis le verrouille
     ///         définitivement en pointant son rôle d'administration vers ROUTER_ROLE_ADMIN,
     ///         un rôle sans membre. Séparé du constructeur parce qu'AccessManager doit exister
-    ///         avant qu'InvestOrGateway puisse être déployé (celui-ci prend son adresse), donc
+    ///         avant qu'AethyxGateway puisse être déployé (celui-ci prend son adresse), donc
     ///         l'adresse du gateway n'est pas encore connue à la construction.
     /// @dev L'ordre compte : c'est d'accorder avant de verrouiller qui rend l'attribution
     ///      possible — en inversant les deux appels, ROUTER_ROLE naîtrait sans membre et sans
     ///      aucun moyen d'en obtenir un.
-    /// @param gateway Adresse d'InvestOrGateway à qui accorder ROUTER_ROLE.
+    /// @param gateway Adresse d'AethyxGateway à qui accorder ROUTER_ROLE.
     function lockRouterRole(address gateway) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (getRoleAdmin(ROUTER_ROLE) == ROUTER_ROLE_ADMIN) revert RouterAlreadySet();
         _grantRole(ROUTER_ROLE, gateway);

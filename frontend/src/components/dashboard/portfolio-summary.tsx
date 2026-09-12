@@ -3,6 +3,9 @@
 import { useCallback, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import { TrendingUp, TrendingDown } from "lucide-react";
+import { motion } from "framer-motion";
+import { AnimatedNumber } from "@/components/ui/animated-number";
+import { fadeUp, staggerContainer } from "@/lib/motion";
 import { ASSETS } from "@/config/assets";
 import { PortfolioAssetRow, type AssetMetrics } from "@/components/dashboard/portfolio-asset-row";
 import { CoverageMeter } from "@/components/reserve/coverage-meter";
@@ -49,40 +52,51 @@ export function PortfolioSummary() {
 
   const oracleHealth = aggregateOracleHealth(entries.map((m) => m.oracleHealth));
 
+  const formatEur = (n: number) =>
+    n.toLocaleString(undefined, { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+
   return (
-    <div className="space-y-5">
-      <div className="glass-card rounded-2xl p-6">
-        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Portfolio value</p>
+    <motion.div variants={staggerContainer(0.08)} initial="hidden" animate="visible" className="space-y-5">
+      <motion.div variants={fadeUp} className="glass-card glass-card-hover rounded-2xl p-6">
+        <p className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+          <span className="live-dot relative inline-block h-1.5 w-1.5 rounded-full bg-primary text-primary" />
+          Portfolio value
+        </p>
         {isConnected ? (
           <div className="mt-1 flex items-baseline gap-3">
-            <p className="text-5xl font-semibold tracking-tight">
-              {totalValue.toLocaleString(undefined, { style: "currency", currency: "EUR", maximumFractionDigits: 0 })}
-            </p>
+            <AnimatedNumber
+              value={totalValue}
+              format={formatEur}
+              className="text-ink num-live text-5xl font-semibold"
+            />
             {weightedChangePct !== null && (
-              <span
-                className={`flex items-center gap-1 text-sm font-medium ${weightedChangePct >= 0 ? "text-emerald-400" : "text-red-400"}`}
+              <motion.span
+                initial={{ opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.35, duration: 0.4 }}
+                className={`pill text-sm ${weightedChangePct >= 0 ? "pill-up" : "pill-down"}`}
               >
                 {weightedChangePct >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
                 {weightedChangePct >= 0 ? "+" : ""}
                 {weightedChangePct.toFixed(2)}%
-              </span>
+              </motion.span>
             )}
           </div>
         ) : (
           <p className="mt-1 text-sm text-muted-foreground">Connect your wallet to see your portfolio value.</p>
         )}
 
-        <div className="mt-5 divide-y divide-white/5">
+        <div className="mt-5 divide-y divide-hairline">
           {ASSETS.map((asset) => (
             <PortfolioAssetRow key={asset.id} asset={asset} onMetrics={handleMetrics} />
           ))}
         </div>
-      </div>
+      </motion.div>
 
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+      <motion.div variants={fadeUp} className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <CoverageMeter coverageBps={coverageBps} />
         <OracleStatusTile health={oracleHealth} />
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

@@ -4,12 +4,45 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   1 · JETONS EXPOSÉS À TAILWIND
+
+   Tout ce qui est déclaré ici devient une classe utilitaire. C'est ce qui permet aux composants
+   d'écrire `border-hairline` ou `bg-surface-inset` plutôt que `border-white/5` et `bg-black/20` —
+   des valeurs littérales qu'il fallait jusqu'ici retrouver dans quinze fichiers pour faire bouger
+   une surface d'un cran.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  /* Geist était chargée par layout.tsx et jamais appliquée : `--font-sans` se référençait
+     elle-même (`var(--font-sans)`), une boucle qui ne résout rien, et la page retombait sur la
+     pile système par défaut de Tailwind. Elle pointe désormais la variable que next/font écrit
+     réellement sur <html>, avec une pile de repli au cas où le fichier de fonte n'arrive pas. */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-heading: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+
+  /* Surfaces et filets — l'API de mise en page du projet. */
+  --color-hairline: var(--hairline);
+  --color-hairline-strong: var(--hairline-strong);
+  --color-surface: var(--surface);
+  --color-surface-inset: var(--surface-inset);
+
+  /* Couleurs d'état, réservées à l'état : jamais employées comme couleur de marque. */
+  --color-status-good: var(--status-good);
+  --color-status-warning: var(--status-warning);
+  --color-status-serious: var(--status-serious);
+  --color-status-critical: var(--status-critical);
+  --color-delta-up: var(--delta-up);
+  --color-delta-down: var(--delta-down);
+
+  /* Courbes partagées, pour que `transition-*` de Tailwind parle le même mouvement que les
+     composants Framer Motion (lib/motion.ts porte les mêmes valeurs). */
+  --ease-snap: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-smooth: cubic-bezier(0.65, 0, 0.35, 1);
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -48,66 +81,100 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   2 · PALETTE
 
-.dark {
-  --background: oklch(0.13 0.006 60);
+   Une seule palette, sombre, définie sur `:root`. L'application impose `class="dark"` sur <html>
+   et n'expose aucun sélecteur de thème : le jeu de jetons clairs qui vivait ici auparavant
+   n'était jamais appliqué, donc jamais vérifié — trente lignes qui décrivaient une interface que
+   personne n'a vue. Le retirer ne change rien au rendu et supprime une vérité concurrente.
+   La classe `.dark` reste sur <html> : les variantes `dark:` des composants shadcn s'y accrochent.
+
+   Discipline de couleur : l'or est la seule couleur de marque. Le vert, le rouge et l'ambre ne
+   disent que l'état (couverture, variation, santé de l'oracle) et ne servent jamais à décorer —
+   sans quoi un écran entièrement coloré ne signale plus rien.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: dark;
+
+  --background: oklch(0.128 0.006 66);
   --foreground: oklch(0.97 0.005 80);
+
   --card: oklch(0.19 0.012 65 / 60%);
   --card-foreground: oklch(0.97 0.005 80);
-  --popover: oklch(0.17 0.012 65);
+  --popover: oklch(0.175 0.012 65);
   --popover-foreground: oklch(0.97 0.005 80);
+
   --primary: oklch(0.795 0.16 82);
   --primary-foreground: oklch(0.145 0.02 70);
   --secondary: oklch(0.24 0.015 65);
   --secondary-foreground: oklch(0.97 0.005 80);
   --muted: oklch(0.24 0.015 65);
-  --muted-foreground: oklch(0.68 0.02 70);
+  --muted-foreground: oklch(0.7 0.018 72);
   --accent: oklch(0.27 0.03 75);
   --accent-foreground: oklch(0.93 0.05 85);
   --destructive: oklch(0.704 0.191 22.216);
+
   --border: oklch(1 0.01 80 / 10%);
   --input: oklch(1 0.01 80 / 12%);
   --ring: oklch(0.795 0.16 82);
-  --chart-1: oklch(0.795 0.16 82);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.17 0.012 65);
+
+  /* ── Surfaces ──────────────────────────────────────────────────────────────────────────────
+     Deux niveaux seulement, et ils se lisent dans l'ordre inverse de l'intuition : une carte
+     s'éclaircit (elle avance vers la lumière), un puits s'assombrit (il se creuse). Trois
+     niveaux ou plus et la hiérarchie cesse d'être perceptible pour devenir décorative. */
+  --surface: oklch(0.205 0.013 66 / 58%);
+  --surface-inset: oklch(0.1 0.005 66 / 55%);
+
+  /* ── Filets ────────────────────────────────────────────────────────────────────────────────
+     Posés en `box-shadow: inset 0 0 0 1px`, jamais en `border`. Un filet en box-shadow n'occupe
+     aucune place dans la boîte, ne se cumule pas aux rayons arrondis et reste un pixel physique
+     quel que soit le rapport de pixels de l'écran — une bordure de 1px sur un écran 2× se rend
+     en deux pixels et lave le tracé. */
+  --hairline: oklch(1 0.012 85 / 8%);
+  --hairline-strong: oklch(1 0.012 85 / 14%);
+
+  /* ── État ──────────────────────────────────────────────────────────────────────────────────
+     Palette d'état fixe, jamais rethématisée : ces quatre pas sont validés pour le contraste sur
+     une surface sombre et pour rester distincts en vision des couleurs déficiente. Ce sont les
+     valeurs que les composants portaient déjà, chacun dans son coin (`lib/coverage.ts`,
+     `oracle-status-tile.tsx`, `audit-badge.tsx` les redéclaraient à l'identique, à un chiffre
+     près) ; elles ne bougent pas, elles se centralisent.
+
+     Une couleur d'état ne dit que l'état — jamais une classe d'actif, jamais un ornement — et ne
+     porte jamais le sens seule : chaque emploi l'accompagne d'une icône et d'un libellé. */
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+
+  /* Variation chiffrée. Distincte de l'état : ceci dit un sens (ça monte, ça baisse), pas une
+     santé. Déclarée en oklch parce que les pastilles en dérivent fond et anneau par `color-mix`,
+     et qu'un mélange en espace perceptuel garde la teinte stable là où le sRGB vire au gris. */
+  --delta-up: oklch(0.78 0.17 152);
+  --delta-down: oklch(0.68 0.2 22);
+
+  /* ── Élévation ─────────────────────────────────────────────────────────────────────────────
+     Trois composantes par niveau, jamais une ombre unique : un liseré de lumière au sommet (la
+     réflexion rasante), une ombre de contact courte et dense (ce qui ancre la carte), une ombre
+     ambiante longue et diffuse (ce qui la décolle du fond). Une seule grande ombre floue donne
+     du salissant, pas de la profondeur. */
+  --elev-1: inset 0 1px 0 0 oklch(1 0.02 85 / 6%), 0 1px 2px 0 oklch(0 0 0 / 40%), 0 12px 28px -18px oklch(0 0 0 / 55%);
+  --elev-2: inset 0 1px 0 0 oklch(1 0.02 85 / 9%), 0 2px 4px 0 oklch(0 0 0 / 45%), 0 28px 56px -24px oklch(0 0 0 / 70%);
+
+  /* ── Mouvement ─────────────────────────────────────────────────────────────────────────────
+     Trois durées nommées, parce qu'une durée retapée à la main dans chaque composant finit
+     toujours par diverger : le survol d'une carte et celui d'un bouton doivent répondre à la
+     même vitesse ou l'interface paraît mal assemblée. */
+  --dur-fast: 130ms;
+  --dur: 220ms;
+  --dur-slow: 420ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --radius: 0.625rem;
+
+  --sidebar: oklch(0.175 0.012 65);
   --sidebar-foreground: oklch(0.97 0.005 80);
   --sidebar-primary: oklch(0.795 0.16 82);
   --sidebar-primary-foreground: oklch(0.145 0.02 70);
@@ -115,14 +182,25 @@
   --sidebar-accent-foreground: oklch(0.97 0.005 80);
   --sidebar-border: oklch(1 0.01 80 / 10%);
   --sidebar-ring: oklch(0.795 0.16 82);
+
+  --chart-1: oklch(0.795 0.16 82);
+  --chart-2: oklch(0.7 0.11 205);
+  --chart-3: oklch(0.65 0.13 285);
+  --chart-4: oklch(0.6 0.09 150);
+  --chart-5: oklch(0.55 0.06 70);
 }
 
-/* ---------------------------------------------------------------------------------------------
-   Fond : trois couches superposées plutôt qu'un dégradé unique. L'aurore porte la couleur et
-   dérive lentement, la grille donne l'échelle et la rigueur, le grain casse le banding que
-   produisent de grands aplats sombres sur un écran 8 bits. Tout est en `transform` et `opacity` :
-   ni blur ni filtre animés, qui forceraient un repaint à chaque image.
-   --------------------------------------------------------------------------------------------- */
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   3 · FOND — trois couches
+
+   L'aurore porte la couleur et dérive lentement, la grille donne l'échelle et la rigueur, le
+   grain casse le banding que produisent de grands aplats sombres sur un écran 8 bits. Les deux
+   premières sont animées ou masquées ; la troisième doit rester parfaitement immobile, sans quoi
+   elle se met à grouiller.
+
+   Seuls `transform` et `opacity` sont animés : ni flou ni filtre, qui forceraient un repaint à
+   chaque image.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 
 .bg-mesh {
   position: relative;
@@ -130,6 +208,10 @@
   background-color: var(--background);
 }
 
+/* Aurore. Deux foyers dominants — l'or de la marque, un bleu froid en contrepoint — et deux
+   appoints très faibles pour la profondeur. La version précédente en alignait quatre à parts
+   égales (or, violet, cyan, rose) : autant de teintes saturées à la même intensité ne composent
+   pas un fond, elles composent un arrière-plan de page d'accueil. */
 .bg-mesh::before {
   content: "";
   position: fixed;
@@ -137,16 +219,16 @@
   z-index: -2;
   pointer-events: none;
   background-image:
-    radial-gradient(ellipse 42% 34% at 18% 8%, oklch(0.795 0.16 82 / 22%), transparent 65%),
-    radial-gradient(ellipse 38% 30% at 88% 4%, oklch(0.62 0.17 285 / 16%), transparent 62%),
-    radial-gradient(ellipse 46% 32% at 62% 96%, oklch(0.68 0.13 205 / 14%), transparent 66%),
-    radial-gradient(ellipse 30% 26% at 4% 76%, oklch(0.72 0.14 330 / 9%), transparent 60%);
-  animation: aurora 44s ease-in-out infinite alternate;
+    radial-gradient(ellipse 46% 38% at 16% 4%, oklch(0.795 0.16 82 / 18%), transparent 68%),
+    radial-gradient(ellipse 42% 34% at 86% 2%, oklch(0.62 0.14 258 / 14%), transparent 66%),
+    radial-gradient(ellipse 52% 36% at 64% 98%, oklch(0.68 0.1 205 / 9%), transparent 70%),
+    radial-gradient(ellipse 34% 28% at 2% 78%, oklch(0.75 0.12 60 / 6%), transparent 64%);
+  animation: aurora 56s ease-in-out infinite alternate;
   will-change: transform;
 }
 
-/* Grille technique, très basse en opacité : lisible comme une trame, jamais comme un motif.
-   Le masque radial la fait disparaître sur les bords pour qu'elle ne coupe pas la page. */
+/* Grille technique, très basse en opacité : lisible comme une trame, jamais comme un motif. Le
+   masque radial la fait disparaître sur les bords pour qu'elle ne coupe pas la page. */
 .bg-mesh::after {
   content: "";
   position: fixed;
@@ -154,10 +236,28 @@
   z-index: -1;
   pointer-events: none;
   background-image:
-    linear-gradient(oklch(1 0 0 / 2.5%) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(1 0 0 / 2.5%) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 35%, transparent 100%);
+    linear-gradient(oklch(1 0 0 / 2.2%) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(1 0 0 / 2.2%) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(ellipse 72% 62% at 50% 38%, #000 30%, transparent 100%);
+}
+
+/* Grain. Porté par <body> et non par `.bg-mesh` : les deux pseudo-éléments de celui-ci sont pris,
+   et surtout le grain doit couvrir la page entière, au-dessus du contenu, sans jamais dériver
+   avec l'aurore. Une turbulence SVG en `data:` plutôt qu'un PNG — aucune requête, aucun octet
+   dans le bundle, et la texture reste nette à tout rapport de pixels.
+
+   Posé au-dessus du contenu (`z-index: 1`), sous les fenêtres modales de Radix qui montent à 50.
+   À 3 %, il est invisible sur du texte et suffit à briser les paliers de dégradé, qui sont le
+   défaut le plus visible d'une interface sombre sur un écran ordinaire. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 @keyframes aurora {
@@ -165,56 +265,223 @@
     transform: translate3d(0, 0, 0) scale(1);
   }
   50% {
-    transform: translate3d(2.5%, -2%, 0) scale(1.08);
+    transform: translate3d(2.5%, -2%, 0) scale(1.07);
   }
   100% {
-    transform: translate3d(-2%, 2.5%, 0) scale(1.04);
+    transform: translate3d(-2%, 2.5%, 0) scale(1.03);
   }
 }
 
-/* ---------------------------------------------------------------------------------------------
-   Surfaces
-   --------------------------------------------------------------------------------------------- */
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   4 · SURFACES
+
+   Deux primitives, et elles disent deux choses différentes : `.glass-card` est un plan qui
+   avance, `.panel` un puits qui se creuse. Tout ce que l'application dessine se range dans l'une
+   ou l'autre.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
 
 .glass-card {
   position: relative;
-  background: linear-gradient(158deg, oklch(0.23 0.016 65 / 72%), oklch(0.155 0.012 65 / 78%));
-  backdrop-filter: blur(18px) saturate(140%);
-  border: 1px solid oklch(1 0.01 80 / 9%);
+  isolation: isolate;
+  background: linear-gradient(158deg, oklch(0.225 0.015 66 / 66%), oklch(0.152 0.01 66 / 74%));
+  backdrop-filter: blur(14px) saturate(135%);
   box-shadow:
-    0 1px 0 0 oklch(1 0.02 85 / 7%) inset,
-    0 24px 48px -28px oklch(0 0 0 / 70%);
+    0 0 0 1px var(--hairline),
+    var(--elev-1);
   transition:
-    border-color 240ms ease,
-    box-shadow 240ms ease,
-    transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-out);
 }
 
-/* Liseré supérieur : la lumière rase qu'aurait une vraie plaque de verre. Purement décoratif,
-   donc retiré de l'arbre d'accessibilité. */
+/* Sans `backdrop-filter`, une surface semi-transparente laisse lire le texte du fond au travers.
+   On rend alors les deux couches opaques plutôt que de faire semblant. */
+@supports not (backdrop-filter: blur(1px)) {
+  .glass-card {
+    background: linear-gradient(158deg, oklch(0.225 0.015 66), oklch(0.152 0.01 66));
+  }
+}
+
+/* Liseré supérieur : la lumière rase qu'aurait une vraie plaque de verre. Purement décoratif. */
 .glass-card::before {
   content: "";
   position: absolute;
-  inset-inline: 12%;
+  inset-inline: 14%;
   top: 0;
   height: 1px;
   pointer-events: none;
-  background: linear-gradient(90deg, transparent, oklch(0.85 0.12 85 / 45%), transparent);
+  background: linear-gradient(90deg, transparent, oklch(0.85 0.12 85 / 42%), transparent);
+}
+
+/* Projecteur suivant le pointeur. `--spot-x` / `--spot-y` sont écrites par components/surface-
+   spotlight.tsx ; en leur absence — rendu serveur, aucun pointeur, appareil tactile — le repli
+   centré en haut donne un reflet fixe plausible, et rien ne se voit tant que la carte n'est pas
+   survolée. C'est ce qui donne à une surface sa matière : elle réagit à l'endroit précis qu'on
+   regarde, au lieu de s'éclairer d'un bloc. */
+.glass-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease-out);
+  background: radial-gradient(
+    420px circle at var(--spot-x, 50%) var(--spot-y, 0%),
+    oklch(0.795 0.16 82 / 9%),
+    transparent 72%
+  );
+}
+
+.glass-card:hover::after {
+  opacity: 1;
 }
 
 .glass-card-hover:hover {
   transform: translateY(-2px);
-  border-color: oklch(0.795 0.16 82 / 24%);
   box-shadow:
-    0 1px 0 0 oklch(1 0.02 85 / 10%) inset,
-    0 32px 64px -28px oklch(0 0 0 / 80%),
-    0 0 0 1px oklch(0.795 0.16 82 / 8%);
+    0 0 0 1px oklch(0.795 0.16 82 / 22%),
+    var(--elev-2);
 }
 
-/* Chiffres alignés en colonne : indispensable dès qu'une valeur se met à jour en direct, sinon
-   la largeur des glyphes fait sautiller la ligne entière. */
-.tabular-nums {
+/* Puits. Ce qui est enfoncé dans une carte : tuiles de statistiques, blocs de frais, encarts
+   d'explication. Remplace le trio `rounded-xl border border-white/5 bg-black/20` répété partout —
+   même dessin, mais un seul endroit où le changer. */
+.panel {
+  position: relative;
+  border-radius: var(--radius-xl);
+  background: var(--surface-inset);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+/* Variante interactive : un puits qui est aussi une cible cliquable. */
+.panel-interactive {
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.panel-interactive:hover {
+  background: oklch(0.13 0.006 66 / 65%);
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+}
+
+/* Filet horizontal. `border-block-end` sur un élément de liste produit un trait sur toute la
+   largeur, y compris sous la gouttière ; celui-ci s'arrête au contenu. */
+.rule {
+  border-block-end: 1px solid var(--hairline);
+}
+
+.rule:last-child {
+  border-block-end: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   5 · DONNÉES
+
+   Une interface financière est d'abord une grille de chiffres : ils méritent leur propre
+   typographie, pas celle du texte courant.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* Trois classes, et le choix entre elles n'est pas cosmétique.
+
+   `.num` — chiffres à chasse fixe, pour les colonnes : lignes de tableau, listes de dépôts, tout
+   ce qui doit s'aligner verticalement d'une ligne à l'autre. */
+.num {
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* `.num-display` — le grand chiffre isolé d'une tuile. Chasse **proportionnelle**, à l'inverse :
+   la chasse fixe donne à chaque chiffre la largeur d'un zéro, ce qui à 2rem et au-delà fait
+   paraître « 121 » anormalement lâche. Rien à aligner ici, donc rien à sacrifier. Crénage
+   resserré, et zéros barrés (`ss01`) désactivés — ils appartiennent au code source, pas à une
+   somme en euros. */
+.num-display {
+  font-variant-numeric: lining-nums;
+  font-feature-settings: "ss01" off;
+  letter-spacing: -0.032em;
+}
+
+/* `.num-live` — un grand chiffre qui *bouge* : valeur de portefeuille qui défile vers sa cible,
+   montant rafraîchi toutes les 30 s. Seul cas où la chasse fixe se justifie sur un grand corps,
+   et il l'emporte largement : sans elle, la largeur du nombre change à chaque image et toute la
+   ligne tremble pendant le décompte. */
+.num-live {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "ss01" off;
+  letter-spacing: -0.032em;
+}
+
+/* Titres et montants en dégradé vertical : l'encre s'allège vers le bas, ce qui donne du relief
+   sans ajouter de couleur. Repli explicite en `color` pour les moteurs qui refusent
+   `background-clip: text`, sinon le texte disparaît au lieu de s'afficher en clair. */
+.text-ink {
+  color: var(--foreground);
+}
+
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .text-ink {
+    background: linear-gradient(180deg, var(--foreground) 10%, oklch(0.97 0.005 80 / 62%) 92%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+  }
+}
+
+/* Pastilles de variation. Le fond et l'anneau sont dérivés de la couleur par `color-mix`, donc
+   changer `--delta-up` déplace les trois d'un coup — au lieu des trois littéraux
+   `text-emerald-400` / `bg-emerald-500/10` / `ring-emerald-500/20` qu'il fallait garder d'accord
+   à la main. La couleur ne porte jamais le sens seule : chaque pastille contient une flèche et
+   un nombre signé. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 9999px;
+  padding-block: 0.125rem;
+  padding-inline: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.125rem;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.pill-up {
+  color: var(--delta-up);
+  background: color-mix(in oklch, var(--delta-up), transparent 90%);
+}
+
+.pill-down {
+  color: var(--delta-down);
+  background: color-mix(in oklch, var(--delta-down), transparent 90%);
+}
+
+/* L'anneau `currentColor` à pleine opacité serait trop dur : on le rattrape ici. */
+.pill-up,
+.pill-down {
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, currentColor, transparent 78%);
+}
+
+/* Jauge. La barre porte son propre fond teinté par la couleur passée en `--meter-color`, ce qui
+   évite au composant de calculer deux opacités à la main dans des attributs `style`. */
+.meter {
+  height: 0.5rem;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: color-mix(in oklch, var(--meter-color, var(--primary)), transparent 86%);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+.meter > * {
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--meter-color, var(--primary));
+  /* Une barre de couverture qui saute d'une valeur à l'autre ne se lit pas ; celle qui glisse
+     montre le sens du mouvement. */
+  transition: width var(--dur-slow) var(--ease-out);
 }
 
 /* Halo de balayage pour les squelettes de chargement. */
@@ -228,7 +495,7 @@
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, oklch(1 0 0 / 6%), transparent);
+  background: linear-gradient(90deg, transparent, oklch(1 0 0 / 7%), transparent);
   animation: shimmer 1.8s ease-in-out infinite;
 }
 
@@ -260,12 +527,206 @@
   animation: pulse-ring 2.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* ---------------------------------------------------------------------------------------------
-   Accessibilité : une préférence système, pas une option. Tout ce qui bouge de lui-même
-   s'arrête ; les transitions déclenchées par l'utilisateur deviennent quasi instantanées plutôt
-   que supprimées, pour que l'interface reste lisible dans ses changements d'état.
-   --------------------------------------------------------------------------------------------- */
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   6 · HUD
 
+   Vocabulaire visuel du terminal temps réel, réservé aux surfaces qui donnent à piloter une
+   position activement (le CDP) plutôt qu'à consulter un état (le tableau de bord, la preuve de
+   réserve, qui gardent `.glass-card`/`.panel`). Même discipline de couleur qu'ailleurs — l'or
+   reste la seule couleur de marque — mais présentée en contours nets et en glow plutôt qu'en
+   verre dépoli : un poste de contrôle se lit d'un coup d'œil, il ne s'admire pas.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* Fond dédié aux surfaces HUD : une trame plus dense et plus contrastée que `.bg-mesh`, plus un
+   balayage qui traverse lentement l'écran — le même geste qu'un radar, pas un décor. */
+.hud-grid {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--background);
+}
+
+.hud-grid::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-image:
+    linear-gradient(oklch(0.795 0.16 82 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.795 0.16 82 / 5%) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 40%, transparent 100%);
+}
+
+.hud-grid::after {
+  content: "";
+  position: fixed;
+  inset: -10% 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, oklch(0.795 0.16 82 / 6%) 48%, transparent 52%, transparent);
+  animation: hud-sweep 9s linear infinite;
+  will-change: transform;
+}
+
+@keyframes hud-sweep {
+  0% {
+    transform: translateY(-110%);
+  }
+  100% {
+    transform: translateY(110%);
+  }
+}
+
+/* Panneau : contour net et lumineux plutôt qu'un plan de verre, coins en équerre façon viseur.
+   `--hud-accent` se redéfinit localement (santé de position, avertissement, danger) ; l'ambre de
+   la marque reste la valeur par défaut. */
+.hud-panel {
+  position: relative;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(158deg, oklch(0.13 0.008 66 / 92%), oklch(0.09 0.006 66 / 96%));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--hud-accent, var(--primary)), transparent 55%),
+    0 0 32px -12px color-mix(in oklch, var(--hud-accent, var(--primary)), transparent 45%),
+    var(--elev-1);
+  transition:
+    box-shadow var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out);
+}
+
+.hud-panel::before,
+.hud-panel::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  border: 1.5px solid color-mix(in oklch, var(--hud-accent, var(--primary)), transparent 20%);
+}
+
+.hud-panel::before {
+  top: -1px;
+  left: -1px;
+  border-right: none;
+  border-bottom: none;
+  border-top-left-radius: 3px;
+}
+
+.hud-panel::after {
+  bottom: -1px;
+  right: -1px;
+  border-left: none;
+  border-top: none;
+  border-bottom-right-radius: 3px;
+}
+
+/* Les deux coins manquants (haut-droit, bas-gauche), portés par un enfant plutôt qu'un troisième
+   pseudo-élément — deux suffisent par élément. */
+.hud-panel > .hud-corner-tr,
+.hud-panel > .hud-corner-bl {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  border: 1.5px solid color-mix(in oklch, var(--hud-accent, var(--primary)), transparent 20%);
+}
+
+.hud-panel > .hud-corner-tr {
+  top: -1px;
+  right: -1px;
+  border-left: none;
+  border-bottom: none;
+  border-top-right-radius: 3px;
+}
+
+.hud-panel > .hud-corner-bl {
+  bottom: -1px;
+  left: -1px;
+  border-right: none;
+  border-top: none;
+  border-bottom-left-radius: 3px;
+}
+
+/* Lignes de balayage très fines à l'intérieur d'un panneau HUD — un CRT, pas un filtre Instagram :
+   1px sur 3, quasi invisible, elle casse juste l'aplat. */
+.hud-scanlines {
+  position: relative;
+}
+
+.hud-scanlines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  background-image: repeating-linear-gradient(
+    0deg,
+    oklch(0 0 0 / 12%) 0px,
+    oklch(0 0 0 / 12%) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  opacity: 0.35;
+}
+
+/* Texte à chasse fixe avec une légère lueur — l'équivalent HUD de `.text-ink` : un readout, pas
+   un titre éditorial. */
+.hud-readout {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  text-shadow: 0 0 18px color-mix(in oklch, var(--hud-accent, var(--primary)), transparent 55%);
+}
+
+/* Curseur clignotant en fin de ligne de commande. */
+.hud-cursor::after {
+  content: "▍";
+  margin-left: 2px;
+  color: var(--hud-accent, var(--primary));
+  animation: hud-blink 1.1s step-end infinite;
+}
+
+@keyframes hud-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Étiquette de statut HUD : coins carrés, majuscules espacées, jamais arrondie — se distingue
+   volontairement de `.pill`, réservée aux surfaces de consultation. */
+.hud-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 2px;
+  padding-block: 0.1875rem;
+  padding-inline: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--hud-accent, var(--primary));
+  background: color-mix(in oklch, var(--hud-accent, var(--primary)), transparent 88%);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--hud-accent, var(--primary)), transparent 55%);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   7 · ACCESSIBILITÉ
+
+   Des préférences système, pas des options. Chacune retire ce qui la gêne sans emporter la
+   lisibilité de l'interface au passage.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* Tout ce qui bouge de lui-même s'arrête. Les transitions déclenchées par l'utilisateur
+   deviennent quasi instantanées plutôt que supprimées : un changement d'état doit rester
+   perceptible même sans animation. */
 @media (prefers-reduced-motion: reduce) {
   .bg-mesh::before,
   .shimmer::after,
@@ -283,39 +744,92 @@
   }
 }
 
+/* Transparence réduite : le flou de fond disparaît et les surfaces deviennent opaques. Le
+   `backdrop-filter` est précisément ce que cette préférence vise — il rend le fond lisible au
+   travers du premier plan. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass-card {
+    background: linear-gradient(158deg, oklch(0.225 0.015 66), oklch(0.152 0.01 66));
+    backdrop-filter: none;
+  }
+
+  .panel {
+    background: oklch(0.1 0.005 66);
+  }
+
+  body::after {
+    display: none;
+  }
+}
+
+/* Contraste élevé : les filets sont la première chose qui disparaît pour un œil qui les cherche.
+   On les renforce plutôt que d'ajouter des bordures pleines, qui changeraient la mise en page. */
+@media (prefers-contrast: more) {
+  :root {
+    --hairline: oklch(1 0.012 85 / 20%);
+    --hairline-strong: oklch(1 0.012 85 / 32%);
+    --muted-foreground: oklch(0.8 0.015 72);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   8 · BASE
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
-    /* Ligatures et chiffres proportionnels par défaut ; les colonnes chiffrées demandent
-       explicitement `tabular-nums`. */
+    /* Alternatives stylistiques de Geist, et chiffres proportionnels par défaut : les colonnes
+       chiffrées demandent explicitement `.num`. */
     font-feature-settings: "cv11", "ss01";
     text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
   }
+
   html {
     @apply font-sans;
     scroll-behavior: smooth;
   }
+
   /* Anneau de focus visible uniquement au clavier — le rendre systématique le ferait ignorer. */
   :focus-visible {
     outline: 2px solid oklch(0.795 0.16 82 / 70%);
     outline-offset: 2px;
+    border-radius: var(--radius-sm);
   }
+
+  /* La sélection reprend l'accent : un détail, mais c'est le genre de surface que l'on ne
+     remarque que lorsqu'elle est restée au bleu du système. */
+  ::selection {
+    background: oklch(0.795 0.16 82 / 26%);
+    color: var(--foreground);
+  }
+
   /* Barres de défilement discrètes, accordées au fond plutôt qu'au thème du système. */
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
   }
+
   ::-webkit-scrollbar-thumb {
     background: oklch(1 0 0 / 8%);
     border: 3px solid transparent;
     border-radius: 9999px;
     background-clip: content-box;
   }
+
   ::-webkit-scrollbar-thumb:hover {
     background: oklch(0.795 0.16 82 / 30%);
     background-clip: content-box;
+  }
+
+  /* Firefox ignore les pseudo-éléments ci-dessus mais comprend ces deux propriétés. */
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(1 0 0 / 10%) transparent;
   }
 }

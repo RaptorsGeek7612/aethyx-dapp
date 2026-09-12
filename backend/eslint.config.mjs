@@ -12,7 +12,7 @@ export default tseslint.config(
     plugins: { "chai-friendly": chaiFriendly },
     rules: {
       // Fixture destructuring in the test suite deliberately pulls out values a given test
-      // doesn't use (see e.g. test/InvestOrGateway.ts), for consistency with the fixture's
+      // doesn't use (see e.g. test/AethyxGateway.ts), for consistency with the fixture's
       // shared return shape.
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
       // Chai assertions like `expect(x).to.be.true` are property-access chains, not function

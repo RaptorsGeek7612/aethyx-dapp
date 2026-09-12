@@ -1,4 +1,4 @@
-# Invest'Or Gateway
+# AETHYX Gateway
 
 Un protocole d'enveloppement ERC-3643 → ERC-20 : on verrouille un token d'actif du monde réel
 (RWA) permissionné et soumis à conformité, et on émet contre lui un ERC-20 librement
@@ -14,7 +14,7 @@ l'argent et l'immobilier tokenisé constituent les trois premières classes d'ac
 Les tokens [ERC-3643](https://eips.ethereum.org/EIPS/eip-3643) — le standard employé pour
 l'émission de RWA régulés — portent des restrictions de transfert : seules des adresses
 inscrites sur liste blanche et contrôlées en conformité peuvent les détenir ou les déplacer.
-Cela les rend difficiles à utiliser dans la DeFi ordinaire. Invest'Or Gateway verrouille le
+Cela les rend difficiles à utiliser dans la DeFi ordinaire. AETHYX Gateway verrouille le
 token ERC-3643 derrière un adaptateur qui, lui, *est* inscrit sur liste blanche, et émet contre
 lui un ERC-20 ordinaire que n'importe qui peut détenir et échanger librement — le collatéral
 sous-jacent restant intégralement adossé et rachetable 1:1 par son détenteur d'origine.
@@ -23,7 +23,7 @@ sous-jacent restant intégralement adossé et rachetable 1:1 par son détenteur 
 
 ```
                     ┌────────────────────┐
- utilisateur ─────► │  InvestOrGateway    │  point d'entrée stable, ne détient jamais de fonds
+ utilisateur ─────► │  AethyxGateway    │  point d'entrée stable, ne détient jamais de fonds
                     └─────────┬───────────┘
                               │ depositFor / redeemFor (ROUTER_ROLE)
                     ┌─────────▼───────────┐        ┌──────────────┐
@@ -63,7 +63,7 @@ sous-jacent restant intégralement adossé et rachetable 1:1 par son détenteur 
 | Contrat | Rôle |
 |---|---|
 | `AccessManager` | Registre `AccessControl` central — tous les autres contrats y vérifient leurs rôles au lieu de gérer les leurs. |
-| `InvestOrGateway` | Point d'entrée unique côté utilisateur (`deposit`/`redeem`). Ne détient aucun fonds ; transmet `msg.sender` tel quel à `VaultManager`. |
+| `AethyxGateway` | Point d'entrée unique côté utilisateur (`deposit`/`redeem`). Ne détient aucun fonds ; transmet `msg.sender` tel quel à `VaultManager`. |
 | `VaultManager` | Chef d'orchestre. Enregistre les adaptateurs d'actifs, applique les frais, émet et brûle les tokens wrappés. Invariant : l'offre wrappée égale toujours la valeur verrouillée. |
 | `AssetAdapter` (+ `GoldAdapter`, `SilverAdapter`, `RealEstateAdapter`) | Prend en garde un actif ERC-3643, exécute les contrôles de conformité préalables, normalise les décimales à 18. |
 | `*AssetFactory` (Gold/Silver/RealEstate) | Déploie ensemble un couple adaptateur + ERC-20 wrappé et l'enregistre auprès de `VaultManager`. Découpé en une fabrique par classe d'actif : une fabrique unique embarquant le bytecode de tous les adaptateurs dépassait la limite de taille EIP-170. |
@@ -103,7 +103,7 @@ npx hardhat test              # tests Solidity + TypeScript
 
 ```shell
 npx hardhat node                                                   # dans un terminal séparé
-npx hardhat ignition deploy ignition/modules/InvestOrGateway.ts --network localhost
+npx hardhat ignition deploy ignition/modules/AethyxGateway.ts --network localhost
 npx hardhat run scripts/seed-demo-assets.ts --network localhost    # amorce les actifs de démo
 ```
 
@@ -122,17 +122,19 @@ du keystore, jamais sa valeur. Y coller directement une URL ou une clé casse la
 fait chercher à Hardhat une entrée portant ce nom.
 
 ```shell
-npx hardhat ignition deploy ignition/modules/InvestOrGateway.ts --network sepolia
+npx hardhat ignition deploy ignition/modules/AethyxGateway.ts --network sepolia
 SEED_NETWORK=sepolia npx hardhat run scripts/seed-demo-assets.ts --network sepolia
 ```
 
 Déploiement Sepolia courant (`backend/ignition/deployments/chain-11155111/`), redéployé pour
 inclure le verrouillage de `ROUTER_ROLE` et le durcissement d'`OracleManager` — vérifié
-`exact_match` sur [Sourcify](https://sourcify.dev) :
+`exact_match` sur [Sourcify](https://sourcify.dev). Ce déploiement précède le renommage en AETHYX ;
+le contrat d'entrée y est resté sous son nom d'origine, `InvestOrGateway` — immuable une fois
+déployé et vérifié, il ne peut pas être renommé sans redéploiement complet :
 
 | Contrat | Adresse |
 |---|---|
-| `InvestOrGateway` | `0xb2aE412cE8c8af237Df28cF1fE06599D33F08d59` |
+| `InvestOrGateway` (nom d'origine — voir ci-dessus) | `0xb2aE412cE8c8af237Df28cF1fE06599D33F08d59` |
 | `VaultManager` | `0x63C5bACc8C4c8d6b18e1c909fAF4b8C5F6646b53` |
 | `OracleManager` | `0x3B5d8fbF69e4672D618639437d13A09204104DF5` |
 | `AccessManager` | `0x177528950CD48409c5bC74a8B9A1e280c7e8072f` |
@@ -175,8 +177,9 @@ cp .env.local.example .env.local   # renseigner les adresses ci-dessus + un proj
 npm run dev                        # http://localhost:3000
 ```
 
-En ligne sur **[investor-gateway.vercel.app](https://investor-gateway.vercel.app)**, pointé sur le
-déploiement Sepolia ci-dessus. Pour déployer le tien, avec la
+En ligne sur **[investor-gateway.vercel.app](https://investor-gateway.vercel.app)** — domaine
+hérité du nom d'origine, à repointer manuellement vers un domaine AETHYX depuis le tableau de
+bord Vercel —, pointé sur le déploiement Sepolia ci-dessus. Pour déployer le tien, avec la
 [CLI Vercel](https://vercel.com/docs/cli) :
 
 ```shell
@@ -209,7 +212,7 @@ risque accepté. À lire avant toute réutilisation de ce code.
 
 - L'`initialAdmin` d'`AccessManager` devrait être un multisig ou un timelock en production, jamais
   un simple EOA : il peut accorder et révoquer tous les rôles, y compris le sien.
-- `ROUTER_ROLE` (détenu par le seul `InvestOrGateway`) est pleinement présumé ne transmettre que
+- `ROUTER_ROLE` (détenu par le seul `AethyxGateway`) est pleinement présumé ne transmettre que
   son propre `msg.sender` immédiat — ne jamais l'accorder à quoi que ce soit susceptible de
   transmettre une adresse tierce arbitraire.
 - Ceci est du code de démonstration et de testnet (`MockERC3643`, `ManualPriceSource`) — non

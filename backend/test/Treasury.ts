@@ -10,7 +10,7 @@ async function deployTreasuryFixture() {
   const treasury = await ethers.deployContract("Treasury", [accessManager.target]);
   await accessManager.grantRole(await accessManager.TREASURY_MANAGER_ROLE(), manager.address);
 
-  const feeToken = await ethers.deployContract("GLDToken", ["Invest'Or Gold", "GLD", accessManager.target]);
+  const feeToken = await ethers.deployContract("GLDToken", ["AETHYX Gold", "GLD", accessManager.target]);
   await accessManager.grantRole(await accessManager.MINTER_ROLE(), admin.address);
   await feeToken.connect(admin).mint(treasury.target, ethers.parseUnits("50", 18));
 

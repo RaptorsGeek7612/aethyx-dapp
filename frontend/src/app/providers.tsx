@@ -8,6 +8,7 @@ import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import { WagmiProvider } from "wagmi";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { SurfaceSpotlight } from "@/components/surface-spotlight";
 import { wagmiConfig } from "@/config/wagmi";
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -24,6 +25,7 @@ export function Providers({ children }: { children: ReactNode }) {
           })}
         >
           <TooltipProvider delayDuration={150}>
+            <SurfaceSpotlight />
             {children}
             <Toaster theme="dark" position="bottom-right" richColors />
           </TooltipProvider>

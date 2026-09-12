@@ -1,11 +1,11 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 import { id as keccakId, parseUnits } from "ethers";
 
-/// Deploys the whole Invest'Or Gateway protocol core (no asset registered yet — that's done
+/// Deploys the whole AETHYX Gateway protocol core (no asset registered yet — that's done
 /// afterwards by calling one of the asset factories' deploy function, e.g.
 /// GoldAssetFactory.deployGoldAsset, once a real ERC-3643 token address is known) and wires up
 /// every cross-contract role grant.
-export default buildModule("InvestOrGateway", (m) => {
+export default buildModule("AethyxGateway", (m) => {
   // In production this should be a multisig/timelock, never a plain EOA — see AccessManager's
   // constructor natspec. Defaults to the first Hardhat account for local/test deployments.
   const initialAdmin = m.getParameter("initialAdmin", m.getAccount(0));
@@ -25,7 +25,7 @@ export default buildModule("InvestOrGateway", (m) => {
   const silverAssetFactory = m.contract("SilverAssetFactory", [accessManager, vaultManager]);
   const realEstateAssetFactory = m.contract("RealEstateAssetFactory", [accessManager, vaultManager]);
   const oracleManager = m.contract("OracleManager", [accessManager, maxStaleness, maxDeviationBps, minSources]);
-  const gateway = m.contract("InvestOrGateway", [accessManager, vaultManager]);
+  const gateway = m.contract("AethyxGateway", [accessManager, vaultManager]);
 
   // Protocol-wide grants — see the natspec in AccessManager.sol for what each role unlocks.
   const minterRole = m.staticCall(accessManager, "MINTER_ROLE", [], 0, { id: "readMinterRole" });

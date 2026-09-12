@@ -1,5 +1,5 @@
 // Auto-extracted from backend/artifacts. Regenerate after changing the source contract.
-export const investOrGatewayAbi = [
+export const aethyxGatewayAbi = [
   {
     inputs: [
       {

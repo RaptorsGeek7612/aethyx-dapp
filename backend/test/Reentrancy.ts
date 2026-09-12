@@ -25,9 +25,7 @@ async function deployReentrancyFixture() {
 
   const maliciousToken = await ethers.deployContract("ReentrantERC3643", ["Malicious Gold", "mGOLD"]);
 
-  await factory
-    .connect(admin)
-    .deployGoldAsset(GOLD_ASSET_ID, "Invest'Or Gold", "GLD", maliciousToken.target, 0n, 0n, 0n);
+  await factory.connect(admin).deployGoldAsset(GOLD_ASSET_ID, "AETHYX Gold", "GLD", maliciousToken.target, 0n, 0n, 0n);
 
   const assetConfig = await vaultManager.assets(GOLD_ASSET_ID);
   const goldAdapter = await ethers.getContractAt("GoldAdapter", assetConfig.adapter);

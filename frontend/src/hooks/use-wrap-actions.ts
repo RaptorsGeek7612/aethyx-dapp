@@ -7,7 +7,7 @@ import { BaseError } from "viem";
 import type { Address, Hex } from "viem";
 import { toast } from "sonner";
 import { erc20Abi } from "@/lib/abis/erc20Abi";
-import { investOrGatewayAbi } from "@/lib/abis/investOrGatewayAbi";
+import { aethyxGatewayAbi } from "@/lib/abis/aethyxGatewayAbi";
 import { GATEWAY_ADDRESS, VAULT_MANAGER_ADDRESS } from "@/config/contracts";
 
 export type WrapStep = "idle" | "approving" | "submitting" | "confirming";
@@ -54,7 +54,7 @@ export function useWrapActions() {
         setStep("submitting");
         const hash = await writeContractAsync({
           address: GATEWAY_ADDRESS as Address,
-          abi: investOrGatewayAbi,
+          abi: aethyxGatewayAbi,
           functionName: "deposit",
           args: [params.assetId, params.amount],
         });
@@ -90,7 +90,7 @@ export function useWrapActions() {
         setStep("submitting");
         const hash = await writeContractAsync({
           address: GATEWAY_ADDRESS as Address,
-          abi: investOrGatewayAbi,
+          abi: aethyxGatewayAbi,
           functionName: "redeem",
           args: [params.assetId, params.amount],
         });

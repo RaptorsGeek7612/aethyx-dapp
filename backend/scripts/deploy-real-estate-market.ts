@@ -135,7 +135,7 @@ if (!alreadyRegistered) {
       .connect(admin)
       .deployRealEstateAsset(
         assetId,
-        "Invest'Or Real Estate",
+        "AETHYX Real Estate",
         "RLD",
         underlyingAddress,
         LOCKUP_DAYS * 24n * 60n * 60n,
