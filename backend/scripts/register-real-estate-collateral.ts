@@ -31,6 +31,7 @@ const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V6";
 // values, not a risk assessment.
 const MIN_COLLATERAL_RATIO_BPS = 20_000n; // 200%
 const LIQUIDATION_THRESHOLD_BPS = 16_000n; // 160%
+const LIQUIDATION_BONUS_BPS = 1_000n; // 10% — bigger than gold/silver's, same reasoning as the ratios above
 const STABILITY_FEE_BPS = 300n; // 3%/year
 const DEBT_CEILING = 200_000n * 10n ** 18n; // well under the building's own appraisal
 
@@ -39,10 +40,7 @@ const { ethers } = await network.create({ network: networkName, chainType: "l1" 
 const chainId = (await ethers.provider.getNetwork()).chainId;
 const deploymentDir = `ignition/deployments/chain-${chainId}`;
 
-const deployed = JSON.parse(readFileSync(`${deploymentDir}/deployed_addresses.json`, "utf8")) as Record<
-  string,
-  string
->;
+const deployed = JSON.parse(readFileSync(`${deploymentDir}/deployed_addresses.json`, "utf8")) as Record<string, string>;
 const accessManagerAddress = deployed["InvestOrGateway#AccessManager"];
 const oracleManagerAddress = deployed["InvestOrGateway#OracleManager"];
 const vaultManagerAddress = deployed["InvestOrGateway#VaultManager"];
@@ -128,6 +126,7 @@ if (existingCollateral.wrappedToken !== ethers.ZeroAddress) {
         asset.wrappedToken,
         MIN_COLLATERAL_RATIO_BPS,
         LIQUIDATION_THRESHOLD_BPS,
+        LIQUIDATION_BONUS_BPS,
         STABILITY_FEE_BPS,
         DEBT_CEILING,
       )

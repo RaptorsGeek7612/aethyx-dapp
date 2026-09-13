@@ -37,6 +37,7 @@ contract CDPManagerTest is Test {
     bytes32 constant GOLD = keccak256("GOLD");
     bytes32 constant SILVER = keccak256("SILVER");
     bytes32 constant FEE_TEST = keccak256("FEE_TEST");
+    bytes32 constant BONUS_TEST = keccak256("BONUS_TEST");
 
     uint256 constant MAX_STALENESS = 1 hours;
     uint256 constant MAX_DEVIATION_BPS = 500;
@@ -45,6 +46,12 @@ contract CDPManagerTest is Test {
     uint16 constant MIN_COLLATERAL_RATIO_BPS = 20_000; // 200 %
     uint16 constant LIQUIDATION_THRESHOLD_BPS = 15_000; // 150 %
     uint256 constant DEBT_CEILING = 1_000_000e18;
+    // Nul sur GOLD et FEE_TEST, pour que tous les tests écrits avant la liquidation partielle
+    // restent valables sans changement : leurs calculs de collatéral saisi supposent une
+    // liquidation totale sans supplément.
+    uint16 constant NO_LIQUIDATION_BONUS_BPS = 0;
+    // 10 %, sur BONUS_TEST uniquement — le collatéral dédié aux tests de liquidation partielle.
+    uint16 constant LIQUIDATION_BONUS_BPS = 1_000;
     // Nul sur GOLD, pour que tous les tests écrits avant le frais de stabilité restent valables
     // sans changement : leurs calculs de ratio supposent une dette qui ne bouge pas seule.
     uint16 constant NO_STABILITY_FEE_BPS = 0;
@@ -94,6 +101,7 @@ contract CDPManagerTest is Test {
             address(collateralToken),
             MIN_COLLATERAL_RATIO_BPS,
             LIQUIDATION_THRESHOLD_BPS,
+            NO_LIQUIDATION_BONUS_BPS,
             NO_STABILITY_FEE_BPS,
             DEBT_CEILING
         );
@@ -102,9 +110,20 @@ contract CDPManagerTest is Test {
             address(collateralToken),
             MIN_COLLATERAL_RATIO_BPS,
             LIQUIDATION_THRESHOLD_BPS,
+            NO_LIQUIDATION_BONUS_BPS,
             STABILITY_FEE_BPS,
             DEBT_CEILING
         );
+        cdp.addCollateralType(
+            BONUS_TEST,
+            address(collateralToken),
+            MIN_COLLATERAL_RATIO_BPS,
+            LIQUIDATION_THRESHOLD_BPS,
+            LIQUIDATION_BONUS_BPS,
+            NO_STABILITY_FEE_BPS,
+            DEBT_CEILING
+        );
+        oracle.addPriceSource(BONUS_TEST, address(priceSource));
     }
 
     /// @notice Mint `amount` de collatéral vers `user` et le fait approuver le CDPManager.
@@ -141,7 +160,7 @@ contract CDPManagerTest is Test {
         assertEq(debtAmount, 100e18);
         assertEq(stableToken.balanceOf(alice), 100e18);
         assertEq(cdp.collateralRatioBps(alice, GOLD), MIN_COLLATERAL_RATIO_BPS);
-        (, , , , , uint256 totalDebt, ) = cdp.collaterals(GOLD);
+        (, , , , , , uint256 totalDebt, ) = cdp.collaterals(GOLD);
         assertEq(totalDebt, 100e18);
     }
 
@@ -160,7 +179,14 @@ contract CDPManagerTest is Test {
     }
 
     function test_MintDebtRevertsAtDebtCeiling() public {
-        cdp.setCollateralParams(GOLD, MIN_COLLATERAL_RATIO_BPS, LIQUIDATION_THRESHOLD_BPS, NO_STABILITY_FEE_BPS, 50e18);
+        cdp.setCollateralParams(
+            GOLD,
+            MIN_COLLATERAL_RATIO_BPS,
+            LIQUIDATION_THRESHOLD_BPS,
+            NO_LIQUIDATION_BONUS_BPS,
+            NO_STABILITY_FEE_BPS,
+            50e18
+        );
 
         _fundCollateral(alice, 1_000e18);
         vm.startPrank(alice);
@@ -202,7 +228,7 @@ contract CDPManagerTest is Test {
         assertEq(debtAmount, 0);
         assertEq(collateralToken.balanceOf(alice), 200e18);
         assertEq(stableToken.totalSupply(), 0);
-        (, , , , , uint256 totalDebt, ) = cdp.collaterals(GOLD);
+        (, , , , , , uint256 totalDebt, ) = cdp.collaterals(GOLD);
         assertEq(totalDebt, 0);
     }
 
@@ -229,12 +255,12 @@ contract CDPManagerTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(CDPManager.PositionHealthy.selector, GOLD, ratioBps, LIQUIDATION_THRESHOLD_BPS)
         );
-        cdp.liquidate(alice, GOLD);
+        cdp.liquidate(alice, GOLD, 100e18);
     }
 
     function test_LiquidateRevertsWhenNoDebt() public {
         vm.expectRevert(abi.encodeWithSelector(CDPManager.NoDebt.selector, alice, GOLD));
-        cdp.liquidate(alice, GOLD);
+        cdp.liquidate(alice, GOLD, 1e18);
     }
 
     /// @notice Une chute de prix fait passer Alice sous le seuil de liquidation sans toucher à
@@ -265,7 +291,7 @@ contract CDPManagerTest is Test {
         stableToken.approve(address(cdp), 100e18);
         vm.expectEmit(true, true, true, true);
         emit CDPManager.PositionLiquidated(alice, GOLD, bob, 100e18, 200e18);
-        cdp.liquidate(alice, GOLD);
+        cdp.liquidate(alice, GOLD, 100e18);
         vm.stopPrank();
 
         (uint256 aliceCollateral, uint256 aliceDebt, ) = cdp.positions(alice, GOLD);
@@ -273,8 +299,94 @@ contract CDPManagerTest is Test {
         assertEq(aliceDebt, 0);
         assertEq(collateralToken.balanceOf(bob), 200e18);
         assertEq(stableToken.balanceOf(bob), 0);
-        (, , , , , uint256 totalDebt, ) = cdp.collaterals(GOLD);
+        (, , , , , , uint256 totalDebt, ) = cdp.collaterals(GOLD);
         assertEq(totalDebt, 100e18); // reste la dette de Bob
+    }
+
+    /// @notice Un liquidateur qui ne rembourse qu'une partie de la dette reçoit la part
+    ///         proportionnelle de collatéral, majorée du bonus du collatéral — la position reste
+    ///         ouverte, réduite d'autant, plutôt que d'exiger la dette entière en un seul appel.
+    function test_PartialLiquidationSeizesProportionalCollateralPlusBonus() public {
+        _fundCollateral(alice, 200e18);
+        vm.startPrank(alice);
+        cdp.depositCollateral(BONUS_TEST, 200e18);
+        cdp.mintDebt(BONUS_TEST, 100e18); // ratio 200 %, sain avant la chute de prix
+        vm.stopPrank();
+
+        // 200e18 à 0,7 valent 140e18, contre 100e18 de dette : ratio 140 %, sous le seuil de 150 %.
+        priceSource.setPrice(0.7e18, block.timestamp);
+        assertLt(cdp.collateralRatioBps(alice, BONUS_TEST), LIQUIDATION_THRESHOLD_BPS);
+
+        deal(address(stableToken), bob, 100e18);
+        vm.startPrank(bob);
+        stableToken.approve(address(cdp), 50e18);
+        // Moitié de la dette (50e18) : part proportionnelle 200e18 * 50e18 / 100e18 = 100e18,
+        // majorée de 10 % = 110e18 au total.
+        vm.expectEmit(true, true, true, true);
+        emit CDPManager.PositionLiquidated(alice, BONUS_TEST, bob, 50e18, 110e18);
+        cdp.liquidate(alice, BONUS_TEST, 50e18);
+        vm.stopPrank();
+
+        (uint256 aliceCollateral, uint256 aliceDebt, ) = cdp.positions(alice, BONUS_TEST);
+        assertEq(aliceCollateral, 90e18); // 200e18 - 110e18
+        assertEq(aliceDebt, 50e18); // 100e18 - 50e18
+        assertEq(collateralToken.balanceOf(bob), 110e18);
+        assertEq(stableToken.balanceOf(bob), 50e18); // 100e18 mintés - 50e18 dépensés à la liquidation
+    }
+
+    /// @notice Le bonus est plafonné à ce que la position détient encore : une liquidation totale
+    ///         sur une position déjà bien en dessous de sa valeur d'origine ne peut pas donner plus
+    ///         que son collatéral restant, bonus ou pas.
+    function test_LiquidationBonusCappedAtRemainingCollateral() public {
+        _fundCollateral(alice, 200e18);
+        vm.startPrank(alice);
+        cdp.depositCollateral(BONUS_TEST, 200e18);
+        cdp.mintDebt(BONUS_TEST, 100e18);
+        vm.stopPrank();
+
+        // Chute assez brutale pour qu'un remboursement total (100e18) laisse un manque, avant
+        // même d'ajouter le bonus : 200e18 à 0,3 valent 60e18.
+        priceSource.setPrice(0.3e18, block.timestamp);
+
+        deal(address(stableToken), bob, 100e18);
+        vm.startPrank(bob);
+        stableToken.approve(address(cdp), 100e18);
+        // Part proportionnelle pleine (100e18 sur 100e18 de dette) = 200e18, majorée de 10 % =
+        // 220e18 en théorie — plafonné aux 200e18 réellement détenus.
+        vm.expectEmit(true, true, true, true);
+        emit CDPManager.PositionLiquidated(alice, BONUS_TEST, bob, 100e18, 200e18);
+        cdp.liquidate(alice, BONUS_TEST, 100e18);
+        vm.stopPrank();
+
+        (uint256 aliceCollateral, , ) = cdp.positions(alice, BONUS_TEST);
+        assertEq(aliceCollateral, 0);
+        assertEq(collateralToken.balanceOf(bob), 200e18);
+    }
+
+    function test_LiquidateRevertsOnZeroDebtToRepay() public {
+        _fundCollateral(alice, 200e18);
+        vm.startPrank(alice);
+        cdp.depositCollateral(GOLD, 200e18);
+        cdp.mintDebt(GOLD, 100e18);
+        vm.stopPrank();
+
+        priceSource.setPrice(0.7e18, block.timestamp);
+
+        vm.expectRevert(abi.encodeWithSelector(CDPManager.InvalidLiquidationAmount.selector, 0, 100e18));
+        cdp.liquidate(alice, GOLD, 0);
+    }
+
+    function test_LiquidateRevertsWhenDebtToRepayExceedsDebt() public {
+        _fundCollateral(alice, 200e18);
+        vm.startPrank(alice);
+        cdp.depositCollateral(GOLD, 200e18);
+        cdp.mintDebt(GOLD, 100e18);
+        vm.stopPrank();
+
+        priceSource.setPrice(0.7e18, block.timestamp);
+
+        vm.expectRevert(abi.encodeWithSelector(CDPManager.InvalidLiquidationAmount.selector, 100e18 + 1, 100e18));
+        cdp.liquidate(alice, GOLD, 100e18 + 1);
     }
 
     function test_AddCollateralTypeRevertsOnDuplicateId() public {
@@ -284,6 +396,7 @@ contract CDPManagerTest is Test {
             address(collateralToken),
             MIN_COLLATERAL_RATIO_BPS,
             LIQUIDATION_THRESHOLD_BPS,
+            NO_LIQUIDATION_BONUS_BPS,
             NO_STABILITY_FEE_BPS,
             DEBT_CEILING
         );
@@ -291,17 +404,59 @@ contract CDPManagerTest is Test {
 
     function test_AddCollateralTypeRevertsWhenThresholdNotBelowMinRatio() public {
         vm.expectRevert(abi.encodeWithSelector(CDPManager.InvalidRiskParams.selector, 15_000, 15_000));
-        cdp.addCollateralType(SILVER, address(collateralToken), 15_000, 15_000, NO_STABILITY_FEE_BPS, DEBT_CEILING);
+        cdp.addCollateralType(
+            SILVER,
+            address(collateralToken),
+            15_000,
+            15_000,
+            NO_LIQUIDATION_BONUS_BPS,
+            NO_STABILITY_FEE_BPS,
+            DEBT_CEILING
+        );
     }
 
     function test_AddCollateralTypeRevertsWhenThresholdAtOrBelow100Percent() public {
         vm.expectRevert(abi.encodeWithSelector(CDPManager.InvalidRiskParams.selector, 15_000, 10_000));
-        cdp.addCollateralType(SILVER, address(collateralToken), 15_000, 10_000, NO_STABILITY_FEE_BPS, DEBT_CEILING);
+        cdp.addCollateralType(
+            SILVER,
+            address(collateralToken),
+            15_000,
+            10_000,
+            NO_LIQUIDATION_BONUS_BPS,
+            NO_STABILITY_FEE_BPS,
+            DEBT_CEILING
+        );
     }
 
     function test_AddCollateralTypeRevertsWhenStabilityFeeTooHigh() public {
         vm.expectRevert(abi.encodeWithSelector(CDPManager.StabilityFeeTooHigh.selector, 10_001));
-        cdp.addCollateralType(SILVER, address(collateralToken), 20_000, 15_000, 10_001, DEBT_CEILING);
+        cdp.addCollateralType(
+            SILVER,
+            address(collateralToken),
+            20_000,
+            15_000,
+            NO_LIQUIDATION_BONUS_BPS,
+            10_001,
+            DEBT_CEILING
+        );
+    }
+
+    /// @notice Un bonus qui, ajouté au seuil de liquidation, dépasserait le ratio minimal est
+    ///         refusé : une position tout juste sous le seuil ne pourrait alors jamais couvrir
+    ///         le bonus promis, même avant toute chute de prix.
+    function test_AddCollateralTypeRevertsWhenLiquidationBonusTooHigh() public {
+        // Seuil 15 000 + 40 % de bonus = 21 000, au-dessus du ratio minimal de 20 000.
+        uint16 tooHighBonus = 4_000;
+        vm.expectRevert(abi.encodeWithSelector(CDPManager.InvalidLiquidationBonus.selector, tooHighBonus));
+        cdp.addCollateralType(
+            SILVER,
+            address(collateralToken),
+            MIN_COLLATERAL_RATIO_BPS,
+            LIQUIDATION_THRESHOLD_BPS,
+            tooHighBonus,
+            NO_STABILITY_FEE_BPS,
+            DEBT_CEILING
+        );
     }
 
     /// @notice Sur un an exactement, un frais de 10 %/an sur 100e18 de dette accumule 10e18 : un
@@ -330,7 +485,7 @@ contract CDPManagerTest is Test {
         assertEq(debtAmount, 60e18); // 100e18 + 10e18 de frais - 50e18 remboursés
         assertEq(stableToken.balanceOf(address(treasury)), 10e18);
         assertEq(stableToken.balanceOf(alice), 50e18); // 100e18 mintés - 50e18 dépensés au remboursement
-        (, , , , , uint256 totalDebt, ) = cdp.collaterals(FEE_TEST);
+        (, , , , , , uint256 totalDebt, ) = cdp.collaterals(FEE_TEST);
         assertEq(totalDebt, 60e18);
     }
 
@@ -347,7 +502,7 @@ contract CDPManagerTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(CDPManager.PositionHealthy.selector, FEE_TEST, 20_000, LIQUIDATION_THRESHOLD_BPS)
         );
-        cdp.liquidate(alice, FEE_TEST);
+        cdp.liquidate(alice, FEE_TEST, 100e18);
 
         // 4 ans à 10 %/an (intérêt simple) : dette 100e18 -> 140e18, ratio 200e18*10000/140e18
         // = 14 285 bps, sous le seuil de 15 000.
@@ -361,7 +516,7 @@ contract CDPManagerTest is Test {
         stableToken.approve(address(cdp), 140e18);
         vm.expectEmit(true, true, true, true);
         emit CDPManager.PositionLiquidated(alice, FEE_TEST, bob, 140e18, 200e18);
-        cdp.liquidate(alice, FEE_TEST);
+        cdp.liquidate(alice, FEE_TEST, 140e18);
         vm.stopPrank();
 
         (uint256 aliceCollateral, uint256 aliceDebt, ) = cdp.positions(alice, FEE_TEST);
@@ -401,7 +556,7 @@ contract CDPManagerTest is Test {
         emit CDPManager.BadDebtRealized(alice, FEE_TEST, 40e18, 0);
         vm.expectEmit(true, true, true, true);
         emit CDPManager.PositionLiquidated(alice, FEE_TEST, bob, 100e18, 200e18);
-        cdp.liquidate(alice, FEE_TEST);
+        cdp.liquidate(alice, FEE_TEST, 100e18);
         vm.stopPrank();
     }
 
@@ -478,7 +633,7 @@ contract CDPManagerTest is Test {
         stableToken.approve(address(cdp), 100e18);
         vm.expectEmit(true, true, false, true);
         emit CDPManager.BadDebtRealized(alice, GOLD, 40e18, 10e18); // fonds à 10e18, manque de 40e18
-        cdp.liquidate(alice, GOLD);
+        cdp.liquidate(alice, GOLD, 100e18);
         vm.stopPrank();
 
         assertEq(cdp.insuranceFundBalance(), 0);

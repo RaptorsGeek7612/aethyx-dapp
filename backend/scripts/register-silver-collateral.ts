@@ -17,6 +17,7 @@ const SILVER_ASSET_ID_LABEL = "SILVER";
 // Same demo values as GOLD in deploy-cdp.ts — placeholders, not a risk assessment.
 const MIN_COLLATERAL_RATIO_BPS = 15_000n;
 const LIQUIDATION_THRESHOLD_BPS = 13_000n;
+const LIQUIDATION_BONUS_BPS = 500n;
 const STABILITY_FEE_BPS = 200n;
 const DEBT_CEILING = 1_000_000n * 10n ** 18n;
 
@@ -25,10 +26,7 @@ const { ethers } = await network.create({ network: networkName, chainType: "l1" 
 const chainId = (await ethers.provider.getNetwork()).chainId;
 const deploymentDir = `ignition/deployments/chain-${chainId}`;
 
-const deployed = JSON.parse(readFileSync(`${deploymentDir}/deployed_addresses.json`, "utf8")) as Record<
-  string,
-  string
->;
+const deployed = JSON.parse(readFileSync(`${deploymentDir}/deployed_addresses.json`, "utf8")) as Record<string, string>;
 const oracleManagerAddress = deployed["InvestOrGateway#OracleManager"];
 const vaultManagerAddress = deployed["InvestOrGateway#VaultManager"];
 
@@ -87,6 +85,7 @@ if (existingCollateral.wrappedToken !== ethers.ZeroAddress) {
         silverAsset.wrappedToken,
         MIN_COLLATERAL_RATIO_BPS,
         LIQUIDATION_THRESHOLD_BPS,
+        LIQUIDATION_BONUS_BPS,
         STABILITY_FEE_BPS,
         DEBT_CEILING,
       )

@@ -25,10 +25,7 @@ const { ethers } = await network.create({ network: networkName, chainType: "l1" 
 const chainId = (await ethers.provider.getNetwork()).chainId;
 const deploymentDir = `ignition/deployments/chain-${chainId}`;
 
-const deployed = JSON.parse(readFileSync(`${deploymentDir}/deployed_addresses.json`, "utf8")) as Record<
-  string,
-  string
->;
+const deployed = JSON.parse(readFileSync(`${deploymentDir}/deployed_addresses.json`, "utf8")) as Record<string, string>;
 const vaultManagerAddress = deployed["InvestOrGateway#VaultManager"];
 const priceSourceAddresses = [
   deployed["InvestOrGateway#priceSourcePrimary"],

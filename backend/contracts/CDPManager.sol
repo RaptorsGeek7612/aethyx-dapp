@@ -15,18 +15,18 @@ import { StableToken } from "./StableToken.sol";
 ///         collatéral. La dette accumule un frais de stabilité continu, en points de base par
 ///         an. Une position dont la valeur du collatéral tombe sous le seuil de liquidation —
 ///         que ce soit par une chute de prix ou par l'accumulation du frais de stabilité — peut
-///         être intégralement liquidée par n'importe qui : le liquidateur rembourse toute la
-///         dette (frais compris) et reçoit tout le collatéral en échange, sa marge étant l'écart
-///         de prix entre le seuil de liquidation et le prix réel au moment où il agit.
-/// @dev Squelette de première version, volontairement simplifié pour rester lisible avant que
-///      l'architecture ne soit validée : ni liquidation partielle ni aux enchères — seule la
-///      liquidation totale d'une position est implémentée, sur le même principe que le
-///      compromis documenté pour l'échéance des dépôts immobiliers (voir le README, section
-///      RealEstateAdapter, et backend/AUDIT.md). Déployable via `ignition/modules/CDP.ts` (réseau
-///      neuf) ou `scripts/deploy-cdp.ts` (retrofit sur un déploiement existant), et câblé côté
-///      frontend sur la page `/cdp` — voir backend/AUDIT.md, constats n°8 (fonds d'assurance,
-///      voir `insuranceFundFeeBps`) et n°9, pour ce que ça couvre et ce qui reste ouvert malgré
-///      ça.
+///         être liquidée, en tout ou partie, par n'importe qui : le liquidateur rembourse tout
+///         ou partie de la dette (frais compris) et reçoit en échange une part proportionnelle
+///         du collatéral, majorée du bonus de liquidation du collatéral concerné.
+/// @dev Liquidation partielle, pas aux enchères : un liquidateur choisit combien de dette
+///      rembourser (jusqu'au total dû) et reçoit `collateralAmount * debtToRepay / debtAmount`
+///      de collatéral, majoré de `liquidationBonusBps`. Rembourser l'intégralité de la dette
+///      reste possible et se comporte comme l'ancienne liquidation totale — c'est le cas
+///      particulier `debtToRepay == debtAmount` de la même formule, sans perte d'arrondi.
+///      Déployable via `ignition/modules/CDP.ts` (réseau neuf) ou `scripts/deploy-cdp.ts`
+///      (retrofit sur un déploiement existant), et câblé côté frontend sur la page `/cdp` — voir
+///      backend/AUDIT.md, constats n°8 (fonds d'assurance, voir `insuranceFundFeeBps`) et n°9,
+///      pour ce que ça couvre et ce qui reste ouvert malgré ça.
 contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -40,6 +40,11 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     ///        davantage" et "on peut se faire liquider".
     /// @param stabilityFeeBps Frais de stabilité annuel, en points de base, accumulé en continu
     ///        sur la dette de chaque position (voir `_currentDebt`).
+    /// @param liquidationBonusBps Part supplémentaire de collatéral, au-delà de la part
+    ///        strictement proportionnelle à la dette remboursée, que reçoit un liquidateur — son
+    ///        incitation à agir, et ce qui fait qu'une liquidation partielle rapproche
+    ///        effectivement la position de la santé plutôt que de simplement la réduire à
+    ///        proportion égale. Plafonné à la valeur du collatéral restant : voir `liquidate`.
     /// @param debtCeiling Dette totale maximale empruntable contre ce collatéral, tous
     ///        emprunteurs confondus.
     /// @param totalDebt Dette totale actuellement due contre ce collatéral, frais de stabilité
@@ -50,6 +55,7 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
         IERC20 wrappedToken;
         uint16 minCollateralRatioBps;
         uint16 liquidationThresholdBps;
+        uint16 liquidationBonusBps;
         uint16 stabilityFeeBps;
         uint256 debtCeiling;
         uint256 totalDebt;
@@ -119,6 +125,7 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     /// @param wrappedToken Token wrappé accepté en collatéral.
     /// @param minCollateralRatioBps Ratio minimal à l'émission, en points de base.
     /// @param liquidationThresholdBps Seuil de liquidation, en points de base.
+    /// @param liquidationBonusBps Bonus de liquidation, en points de base.
     /// @param stabilityFeeBps Frais de stabilité annuel, en points de base.
     /// @param debtCeiling Plafond de dette totale contre ce collatéral.
     event CollateralTypeAdded(
@@ -126,6 +133,7 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
         address indexed wrappedToken,
         uint16 minCollateralRatioBps,
         uint16 liquidationThresholdBps,
+        uint16 liquidationBonusBps,
         uint16 stabilityFeeBps,
         uint256 debtCeiling
     );
@@ -137,12 +145,14 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     /// @param collateralId Collatéral concerné.
     /// @param minCollateralRatioBps Nouveau ratio minimal, en points de base.
     /// @param liquidationThresholdBps Nouveau seuil de liquidation, en points de base.
+    /// @param liquidationBonusBps Nouveau bonus de liquidation, en points de base.
     /// @param stabilityFeeBps Nouveau frais de stabilité annuel, en points de base.
     /// @param debtCeiling Nouveau plafond de dette totale.
     event CollateralParamsSet(
         bytes32 indexed collateralId,
         uint16 minCollateralRatioBps,
         uint16 liquidationThresholdBps,
+        uint16 liquidationBonusBps,
         uint16 stabilityFeeBps,
         uint256 debtCeiling
     );
@@ -226,6 +236,16 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     /// @param minCollateralRatioBps Ratio minimal proposé.
     /// @param liquidationThresholdBps Seuil de liquidation proposé.
     error InvalidRiskParams(uint16 minCollateralRatioBps, uint16 liquidationThresholdBps);
+    /// @notice Le bonus de liquidation proposé ferait dépasser 100 % de collatéral supplémentaire,
+    ///         ou rendrait le seuil de liquidation majoré du bonus supérieur au ratio minimal —
+    ///         une position tout juste sous le seuil de liquidation ne pourrait alors jamais
+    ///         couvrir le bonus promis, même avant toute perte de valeur du collatéral.
+    /// @param liquidationBonusBps Bonus proposé, en points de base.
+    error InvalidLiquidationBonus(uint16 liquidationBonusBps);
+    /// @notice La liquidation demande de rembourser zéro dette, ou plus que la dette due.
+    /// @param debtToRepay Montant demandé.
+    /// @param debtAmount Dette due.
+    error InvalidLiquidationAmount(uint256 debtToRepay, uint256 debtAmount);
     /// @notice Un frais de stabilité supérieur à 100 % par an a été demandé.
     /// @param stabilityFeeBps Valeur refusée, en points de base.
     error StabilityFeeTooHigh(uint16 stabilityFeeBps);
@@ -283,6 +303,7 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     /// @param wrappedToken Token wrappé accepté en collatéral.
     /// @param minCollateralRatioBps Ratio minimal à l'émission, en points de base.
     /// @param liquidationThresholdBps Seuil de liquidation, en points de base.
+    /// @param liquidationBonusBps Bonus de liquidation, en points de base.
     /// @param stabilityFeeBps Frais de stabilité annuel, en points de base.
     /// @param debtCeiling Plafond de dette totale contre ce collatéral.
     function addCollateralType(
@@ -290,19 +311,21 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
         address wrappedToken,
         uint16 minCollateralRatioBps,
         uint16 liquidationThresholdBps,
+        uint16 liquidationBonusBps,
         uint16 stabilityFeeBps,
         uint256 debtCeiling
     ) external onlyRole(RISK_MANAGER_ROLE) {
         if (address(collaterals[collateralId].wrappedToken) != address(0)) {
             revert CollateralAlreadyRegistered(collateralId);
         }
-        _validateRiskParams(minCollateralRatioBps, liquidationThresholdBps);
+        _validateRiskParams(minCollateralRatioBps, liquidationThresholdBps, liquidationBonusBps);
         _validateStabilityFee(stabilityFeeBps);
 
         collaterals[collateralId] = CollateralConfig({
             wrappedToken: IERC20(wrappedToken),
             minCollateralRatioBps: minCollateralRatioBps,
             liquidationThresholdBps: liquidationThresholdBps,
+            liquidationBonusBps: liquidationBonusBps,
             stabilityFeeBps: stabilityFeeBps,
             debtCeiling: debtCeiling,
             totalDebt: 0,
@@ -313,6 +336,7 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
             wrappedToken,
             minCollateralRatioBps,
             liquidationThresholdBps,
+            liquidationBonusBps,
             stabilityFeeBps,
             debtCeiling
         );
@@ -332,26 +356,30 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     /// @param collateralId Collatéral concerné.
     /// @param minCollateralRatioBps Nouveau ratio minimal, en points de base.
     /// @param liquidationThresholdBps Nouveau seuil de liquidation, en points de base.
+    /// @param liquidationBonusBps Nouveau bonus de liquidation, en points de base.
     /// @param stabilityFeeBps Nouveau frais de stabilité annuel, en points de base.
     /// @param debtCeiling Nouveau plafond de dette totale.
     function setCollateralParams(
         bytes32 collateralId,
         uint16 minCollateralRatioBps,
         uint16 liquidationThresholdBps,
+        uint16 liquidationBonusBps,
         uint16 stabilityFeeBps,
         uint256 debtCeiling
     ) external onlyRole(RISK_MANAGER_ROLE) {
-        _validateRiskParams(minCollateralRatioBps, liquidationThresholdBps);
+        _validateRiskParams(minCollateralRatioBps, liquidationThresholdBps, liquidationBonusBps);
         _validateStabilityFee(stabilityFeeBps);
         CollateralConfig storage config = collaterals[collateralId];
         config.minCollateralRatioBps = minCollateralRatioBps;
         config.liquidationThresholdBps = liquidationThresholdBps;
+        config.liquidationBonusBps = liquidationBonusBps;
         config.stabilityFeeBps = stabilityFeeBps;
         config.debtCeiling = debtCeiling;
         emit CollateralParamsSet(
             collateralId,
             minCollateralRatioBps,
             liquidationThresholdBps,
+            liquidationBonusBps,
             stabilityFeeBps,
             debtCeiling
         );
@@ -454,21 +482,24 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
         emit DebtRepaid(msg.sender, collateralId, amount);
     }
 
-    /// @notice Liquide intégralement la position de `user` sur `collateralId` : l'appelant
-    ///         rembourse toute la dette due, frais de stabilité accumulé inclus, et reçoit en
-    ///         échange tout le collatéral verrouillé. Réservé aux positions passées sous le
-    ///         seuil de liquidation du collatéral. Exige que l'appelant ait approuvé ce contrat
-    ///         pour au moins la dette due.
-    /// @dev Liquidation totale plutôt que partielle ou aux enchères — voir la natspec de
-    ///      contrat. La marge du liquidateur est l'écart, au moment où il agit, entre la valeur
-    ///      du collatéral reçu et la dette remboursée ; rien ne garantit qu'elle soit positive
-    ///      si le prix a chuté d'un coup sous le seuil de liquidation lui-même (dette
-    ///      partiellement non couverte, ou "bad debt"). Le fonds d'assurance comble ce manque
-    ///      dans la limite de son solde — voir `backend/AUDIT.md`, constat n°8 — et
-    ///      `BadDebtRealized` rend visible ce qui, au-delà, reste à la charge du liquidateur.
+    /// @notice Liquide tout ou partie de la position de `user` sur `collateralId` : l'appelant
+    ///         rembourse `debtToRepay` (jusqu'à la dette due, frais de stabilité accumulé inclus)
+    ///         et reçoit en échange la part de collatéral proportionnelle, majorée du bonus de
+    ///         liquidation du collatéral. Réservé aux positions passées sous le seuil de
+    ///         liquidation. Exige que l'appelant ait approuvé ce contrat pour au moins
+    ///         `debtToRepay`.
+    /// @dev Liquidation partielle, pas aux enchères. `debtToRepay == debtAmount` (liquidation
+    ///      totale) est le cas particulier de la même formule proportionnelle et ne perd rien à
+    ///      l'arrondi : `collateralAmount * debtAmount / debtAmount == collateralAmount` exactement.
+    ///      Le bonus est plafonné au collatéral réellement disponible — une position dont la
+    ///      valeur du collatéral ne couvre déjà plus la dette (avant même le bonus) donne tout ce
+    ///      qui reste, et le manque, bonus compris, tombe dans le fonds d'assurance dans la limite
+    ///      de son solde. `BadDebtRealized` rend visible ce qui, au-delà, reste à la charge du
+    ///      liquidateur. Voir `backend/AUDIT.md`, constat n°8.
     /// @param user Emprunteur dont la position est liquidée.
     /// @param collateralId Collatéral concerné.
-    function liquidate(address user, bytes32 collateralId) external whenNotPaused nonReentrant {
+    /// @param debtToRepay Dette à rembourser, en 18 décimales — jusqu'à la dette due.
+    function liquidate(address user, bytes32 collateralId, uint256 debtToRepay) external whenNotPaused nonReentrant {
         Position storage position = positions[user][collateralId];
         _settleAccrual(user, collateralId, position);
         if (position.debtAmount == 0) revert NoDebt(user, collateralId);
@@ -478,9 +509,19 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
         if (ratioBps >= liquidationThresholdBps) {
             revert PositionHealthy(collateralId, ratioBps, liquidationThresholdBps);
         }
+        if (debtToRepay == 0 || debtToRepay > position.debtAmount) {
+            revert InvalidLiquidationAmount(debtToRepay, position.debtAmount);
+        }
 
-        uint256 debtRepaid = position.debtAmount;
-        uint256 collateralSeized = position.collateralAmount;
+        uint256 debtRepaid = debtToRepay;
+        // Proportional share of the position's collateral for the debt actually being repaid,
+        // majorée du bonus. Capped at what the position actually still holds: a deeply underwater
+        // position can't hand out more collateral than it has, bonus or not.
+        uint256 collateralSeized = (position.collateralAmount * debtRepaid) / position.debtAmount;
+        collateralSeized += (collateralSeized * collaterals[collateralId].liquidationBonusBps) / BPS_DENOMINATOR;
+        if (collateralSeized > position.collateralAmount) {
+            collateralSeized = position.collateralAmount;
+        }
 
         // Computed before any state change below, at the same price `ratioBps` above was already
         // judged against.
@@ -497,8 +538,8 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
             emit BadDebtRealized(user, collateralId, shortfall, coveredByInsuranceFund);
         }
 
-        position.debtAmount = 0;
-        position.collateralAmount = 0;
+        position.debtAmount -= debtRepaid;
+        position.collateralAmount -= collateralSeized;
         collaterals[collateralId].totalDebt -= debtRepaid;
 
         stableToken.burnFrom(msg.sender, debtRepaid);
@@ -604,12 +645,26 @@ contract CDPManager is AccessManaged, Pausable, ReentrancyGuard {
     }
 
     /// @notice Refuse des paramètres de risque incohérents : le seuil de liquidation doit rester
-    ///         strictement sous le ratio minimal, et les deux doivent dépasser 100 %.
+    ///         strictement sous le ratio minimal, les deux doivent dépasser 100 %, et le bonus de
+    ///         liquidation ne doit pas dépasser 100 % ni faire dépasser au seuil de liquidation
+    ///         majoré du bonus le ratio minimal lui-même — sans quoi une position tout juste sous
+    ///         le seuil ne pourrait jamais couvrir le bonus promis, même avant toute chute de prix.
     /// @param minCollateralRatioBps Ratio minimal proposé.
     /// @param liquidationThresholdBps Seuil de liquidation proposé.
-    function _validateRiskParams(uint16 minCollateralRatioBps, uint16 liquidationThresholdBps) private pure {
+    /// @param liquidationBonusBps Bonus de liquidation proposé.
+    function _validateRiskParams(
+        uint16 minCollateralRatioBps,
+        uint16 liquidationThresholdBps,
+        uint16 liquidationBonusBps
+    ) private pure {
         if (liquidationThresholdBps <= BPS_DENOMINATOR || minCollateralRatioBps <= liquidationThresholdBps) {
             revert InvalidRiskParams(minCollateralRatioBps, liquidationThresholdBps);
+        }
+        uint256 thresholdWithBonus =
+            uint256(liquidationThresholdBps) +
+                (uint256(liquidationThresholdBps) * liquidationBonusBps) / BPS_DENOMINATOR;
+        if (liquidationBonusBps > BPS_DENOMINATOR || thresholdWithBonus > minCollateralRatioBps) {
+            revert InvalidLiquidationBonus(liquidationBonusBps);
         }
     }
 

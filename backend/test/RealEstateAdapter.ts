@@ -47,8 +47,8 @@ async function deployRealEstateFixture() {
   return { admin, alice, bob, gateway, vaultManager, propertyToken, realEstateAdapter, rldToken };
 }
 
-describe("RealEstateAdapter — per-deposit maturity", function () {
-  it("blocks redemption before the deposit's own maturity, and allows it after", async function () {
+describe("RealEstateAdapter — market-wide maturity pool", function () {
+  it("blocks redemption before any deposit has matured, and allows it after", async function () {
     const { alice, vaultManager, propertyToken, realEstateAdapter, rldToken } =
       await networkHelpers.loadFixture(deployRealEstateFixture);
 
@@ -66,7 +66,7 @@ describe("RealEstateAdapter — per-deposit maturity", function () {
     await expect(vaultManager.connect(alice).redeem(REAL_ESTATE_ASSET_ID, amount)).to.emit(vaultManager, "Redeemed");
   });
 
-  it("gives two deposits two different maturities, each counted from its own date", async function () {
+  it("gives two deposits two different maturities in the pool's schedule, each counted from its own date", async function () {
     const { alice, vaultManager, propertyToken, realEstateAdapter } =
       await networkHelpers.loadFixture(deployRealEstateFixture);
 
@@ -76,22 +76,20 @@ describe("RealEstateAdapter — per-deposit maturity", function () {
     await vaultManager.connect(alice).deposit(REAL_ESTATE_ASSET_ID, amount);
     const firstAt = BigInt(await networkHelpers.time.latest());
 
-    // Three days later, a second deposit. The point of the whole design: it opens its own
-    // schedule rather than joining — or worse, postponing — the first one's.
+    // Three days later, a second deposit — its own tranche in the shared schedule, not merged
+    // into or postponing the first one's.
     await networkHelpers.time.increase(3n * 24n * 60n * 60n);
     await vaultManager.connect(alice).deposit(REAL_ESTATE_ASSET_ID, amount);
     const secondAt = BigInt(await networkHelpers.time.latest());
 
-    const schedule = await realEstateAdapter.lockSchedule(alice.address);
+    const schedule = await realEstateAdapter.lockSchedule();
     expect(schedule.length).to.equal(2);
     expect(schedule[0].unlockAt).to.equal(firstAt + LOCKUP_PERIOD);
     expect(schedule[1].unlockAt).to.equal(secondAt + LOCKUP_PERIOD);
-    // Exactly the gap between the two deposits — not a hardcoded three days, which the block
-    // mined by the second deposit puts one second out.
     expect(schedule[1].unlockAt - schedule[0].unlockAt).to.equal(secondAt - firstAt);
   });
 
-  it("releases the matured deposit while the later one is still running", async function () {
+  it("releases the matured tranche from the pool while a later one is still running", async function () {
     const { alice, vaultManager, propertyToken, realEstateAdapter, rldToken } =
       await networkHelpers.loadFixture(deployRealEstateFixture);
 
@@ -104,8 +102,8 @@ describe("RealEstateAdapter — per-deposit maturity", function () {
     await vaultManager.connect(alice).deposit(REAL_ESTATE_ASSET_ID, second);
     await networkHelpers.time.increase(101n);
 
-    expect(await realEstateAdapter.maturedAmountOf(alice.address)).to.equal(first);
-    expect(await realEstateAdapter.lockedAmountOf(alice.address)).to.equal(second);
+    expect(await realEstateAdapter.maturedAmountNow()).to.equal(first);
+    expect(await realEstateAdapter.lockedAmountNow()).to.equal(second);
 
     await rldToken.connect(alice).approve(vaultManager.target, first + second);
     await expect(vaultManager.connect(alice).redeem(REAL_ESTATE_ASSET_ID, first + 1n)).to.be.revertedWithCustomError(
@@ -118,29 +116,28 @@ describe("RealEstateAdapter — per-deposit maturity", function () {
     await expect(vaultManager.connect(alice).redeem(REAL_ESTATE_ASSET_ID, second)).to.emit(vaultManager, "Redeemed");
   });
 
-  it("tracks maturities per real end user, not per Gateway, when routed through the Gateway", async function () {
-    const { alice, bob, gateway, vaultManager, propertyToken, realEstateAdapter, rldToken } =
+  it("shares the matured pool across independent depositors, not just within one account", async function () {
+    // The actual fix, demonstrated directly rather than only via a self-transfer: two genuinely
+    // different depositors draw from the same maturity pool. Bob's own tokens redeem against
+    // Alice's already-matured deposit, because the pool tracks a total, not who deposited what.
+    const { alice, bob, vaultManager, propertyToken, realEstateAdapter, rldToken } =
       await networkHelpers.loadFixture(deployRealEstateFixture);
 
     const amount = ethers.parseUnits("100", 18);
     await propertyToken.connect(alice).approve(realEstateAdapter.target, amount);
-    await gateway.connect(alice).deposit(REAL_ESTATE_ASSET_ID, amount);
+    await vaultManager.connect(alice).deposit(REAL_ESTATE_ASSET_ID, amount);
     await networkHelpers.time.increase(LOCKUP_PERIOD + 1n);
 
+    // Bob deposits only after Alice's tranche has already matured — his own tranche is brand new
+    // and would still be locked on its own.
     await propertyToken.connect(bob).approve(realEstateAdapter.target, amount);
-    await gateway.connect(bob).deposit(REAL_ESTATE_ASSET_ID, amount);
-
-    await rldToken.connect(alice).approve(vaultManager.target, amount);
-    await expect(gateway.connect(alice).redeem(REAL_ESTATE_ASSET_ID, amount)).to.emit(vaultManager, "Redeemed");
+    await vaultManager.connect(bob).deposit(REAL_ESTATE_ASSET_ID, amount);
 
     await rldToken.connect(bob).approve(vaultManager.target, amount);
-    await expect(gateway.connect(bob).redeem(REAL_ESTATE_ASSET_ID, amount)).to.be.revertedWithCustomError(
-      realEstateAdapter,
-      "StillLocked",
-    );
+    await expect(vaultManager.connect(bob).redeem(REAL_ESTATE_ASSET_ID, amount)).to.emit(vaultManager, "Redeemed");
   });
 
-  it("documents the accepted escape: a self-transfer redeems before maturity", async function () {
+  it("closes the self-transfer escape: a second address draws from the same pool, not a fresh allowance", async function () {
     const { alice, bob, vaultManager, propertyToken, realEstateAdapter, rldToken } =
       await networkHelpers.loadFixture(deployRealEstateFixture);
 
@@ -148,16 +145,38 @@ describe("RealEstateAdapter — per-deposit maturity", function () {
     await propertyToken.connect(alice).approve(realEstateAdapter.target, amount);
     await vaultManager.connect(alice).deposit(REAL_ESTATE_ASSET_ID, amount);
 
-    // Not a bug report: per-deposit maturities have to be keyed on an address, the wrapped token
-    // is freely transferable, and nothing on-chain separates a second address the depositor owns
-    // from a genuine over-the-counter buyer. The only gate that closes this — one schedule shared
-    // by the whole market — was tried and dropped, because it dissolves exactly the individuality
-    // this market exists to express. Pinned as a test so the trade-off cannot be forgotten or
-    // mistaken for a regression. See AUDIT.md finding 1.
+    // The wrapped token stays entirely transferable — only its conversion back to the underlying
+    // is metered by the shared pool, not the ERC-20 transfer itself.
     await rldToken.connect(alice).transfer(bob.address, amount);
     await rldToken.connect(bob).approve(vaultManager.target, amount);
 
+    // Before maturity, the second address gets exactly what the first would have: nothing.
+    await expect(vaultManager.connect(bob).redeem(REAL_ESTATE_ASSET_ID, amount)).to.be.revertedWithCustomError(
+      realEstateAdapter,
+      "StillLocked",
+    );
+
+    // After maturity, it succeeds — not because the self-transfer bought anything, but because
+    // the pool itself has matured and anyone holding the wrapped token can now redeem from it.
+    await networkHelpers.time.increase(LOCKUP_PERIOD + 1n);
     await expect(vaultManager.connect(bob).redeem(REAL_ESTATE_ASSET_ID, amount)).to.emit(vaultManager, "Redeemed");
-    expect(await propertyToken.balanceOf(bob.address)).to.equal(ethers.parseUnits("1100", 18));
+  });
+
+  it("routes deposits and redemptions through the Gateway the same way, real end user or not", async function () {
+    const { alice, gateway, vaultManager, propertyToken, realEstateAdapter, rldToken } =
+      await networkHelpers.loadFixture(deployRealEstateFixture);
+
+    const amount = ethers.parseUnits("100", 18);
+    await propertyToken.connect(alice).approve(realEstateAdapter.target, amount);
+    await gateway.connect(alice).deposit(REAL_ESTATE_ASSET_ID, amount);
+
+    await rldToken.connect(alice).approve(vaultManager.target, amount);
+    await expect(gateway.connect(alice).redeem(REAL_ESTATE_ASSET_ID, amount)).to.be.revertedWithCustomError(
+      realEstateAdapter,
+      "StillLocked",
+    );
+
+    await networkHelpers.time.increase(LOCKUP_PERIOD + 1n);
+    await expect(gateway.connect(alice).redeem(REAL_ESTATE_ASSET_ID, amount)).to.emit(vaultManager, "Redeemed");
   });
 });

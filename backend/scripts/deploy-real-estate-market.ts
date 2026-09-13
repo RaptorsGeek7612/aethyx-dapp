@@ -7,22 +7,26 @@ import { network } from "hardhat";
 // Why the factory too. A factory contains its adapter's *creation bytecode*, baked in when the
 // factory itself was compiled and deployed. It is immutable, so a factory deployed before an
 // adapter change keeps producing the old adapter forever, no matter what the local sources say.
-// The Sepolia factory from the original deployment still emits the very first RealEstateAdapter,
-// the one with a single `lockedUntil` per address: every market deployed through it — including
-// REAL_ESTATE_PARIS_01_V3 — carries that logic, not the per-deposit maturity of a28d556 and not
-// the market-wide schedule of e01fdf0. Deploying the fix therefore means deploying a new factory
-// first. See AUDIT.md finding 1.
+// V6 and earlier were deployed by factories carrying the per-deposit-maturity adapter; this
+// version's RealEstateAdapter is the market-wide pool that closes AUDIT.md finding 1's
+// self-transfer escape (undoing the earlier a28d556 → e01fdf0 → per-deposit round-trip in favor
+// of security over per-deposit individuality — a deliberate product call, not a reversal by
+// accident). Deploying the fix means deploying a new factory first, same as every prior swap.
 //
-// Each deposit carries its own maturity, counted from its own date — the same duration for all,
-// but two deposits three days apart become redeemable three days apart. The known escape (a
-// self-transfer redeems early) is accepted, not overlooked: see RealEstateAdapter.sol and
-// AUDIT.md finding 1.
+// Every deposit still opens its own tranche with its own unlockAt in the shared schedule, but
+// redemption now draws from the market's total matured pool rather than the caller's own share:
+// a self-transfer to a second address no longer resets anything, because the second address pulls
+// from the same pool the first would have. See RealEstateAdapter.sol's own natspec.
 //
 // VaultManager.registerAsset reverts with AssetAlreadyRegistered on an id it already knows, and
 // there is no way to repoint an existing id at a new adapter, so every redeploy needs its own
 // asset id. Bump VERSION below and the frontend's REAL_ESTATE_LABEL in config/assets.ts to match
 // — the frontend derives the id from that string, so the two must not drift. Deploy first, switch
 // the frontend second: the reverse leaves the UI pointing at a market that does not exist yet.
+// If this market is also registered as CDP collateral (see register-real-estate-collateral.ts),
+// migrate that too: freeze the old version with CDPManager.setCollateralActive(oldId, false) and
+// register the new one — existing positions against the old version stay liquidatable, they just
+// can't grow.
 //
 //   hardhat run scripts/deploy-real-estate-market.ts --network sepolia
 //
@@ -31,10 +35,10 @@ import { network } from "hardhat";
 //
 // Re-running is safe: each step is skipped if it has already been done.
 
-const VERSION = "V6";
+const VERSION = "V7";
 // Durée de détention appliquée à chaque dépôt. Même durée pour tous, comptée depuis la date de
-// chaque dépôt : deux dépôts espacés de trois jours deviennent remboursables à trois jours
-// d'intervalle. Voir RealEstateAdapter.sol.
+// chaque dépôt : deux dépôts espacés de trois jours ouvrent des tranches distinctes dans le pool
+// commun. Voir RealEstateAdapter.sol.
 const LOCKUP_DAYS = 30n;
 const BASE_LABEL = "REAL_ESTATE_PARIS_01";
 const LABEL = `${BASE_LABEL}_${VERSION}`;
@@ -42,7 +46,7 @@ const LABEL = `${BASE_LABEL}_${VERSION}`;
 // Markets to inherit the ERC-3643 underlying from, newest first. Reusing the token rather than
 // minting a parallel one means a holder's untouched underlying balance still works with the new
 // market; each superseded market keeps custody of whatever was already deposited against it.
-const UNDERLYING_SOURCES = [`${BASE_LABEL}_V5`, `${BASE_LABEL}_V4`, `${BASE_LABEL}_V3`, BASE_LABEL];
+const UNDERLYING_SOURCES = [`${BASE_LABEL}_V6`, `${BASE_LABEL}_V5`, `${BASE_LABEL}_V4`, `${BASE_LABEL}_V3`, BASE_LABEL];
 
 const networkName = process.env.SEED_NETWORK ?? "sepolia";
 const { ethers } = await network.create({ network: networkName, chainType: "l1" });
@@ -163,27 +167,28 @@ if (await underlying.isVerified(config.adapter)) {
 //
 // A factory carries its adapter's creation bytecode, so one compiled before an adapter change
 // keeps emitting the old adapter. Read the deployed adapter back rather than trusting the
-// factory: lockSchedule(address) exists only on the per-deposit design, and lockedAmountNow()
-// only on the market-wide one this replaced. A stale factory fails here instead of going live.
+// factory: lockedAmountNow() exists only on the market-wide design, and lockSchedule(address)
+// (an argument at all) only on the per-deposit one this replaces. A stale factory fails here
+// instead of going live.
 const adapter = await ethers.getContractAt("RealEstateAdapter", config.adapter);
 const code = await ethers.provider.getCode(config.adapter);
-if (code.includes(ethers.id("lockedAmountNow()").slice(2, 10))) {
-  throw new Error("deployed adapter meters the market, not each deposit — the factory is stale");
+if (!code.includes(ethers.id("lockedAmountNow()").slice(2, 10))) {
+  throw new Error("deployed adapter meters per depositor, not the market — the factory is stale");
 }
 const lockupSeconds = await adapter.lockupPeriod();
 if (lockupSeconds !== LOCKUP_DAYS * 24n * 60n * 60n) {
   throw new Error(`lockupPeriod reads ${lockupSeconds}s, expected ${LOCKUP_DAYS} days`);
 }
-// Reading an empty schedule back proves the per-deposit surface is actually callable, not merely
+// Reading an empty schedule back proves the market-wide surface is actually callable, not merely
 // present in the bytecode.
-if ((await adapter.lockSchedule(admin.address)).length !== 0) {
+if ((await adapter.lockSchedule()).length !== 0) {
   throw new Error("a freshly deployed market already has locked tranches");
 }
 if ((await adapter.assetId()) !== assetId) throw new Error("deployed adapter reports a different assetId");
 if (!(await underlying.isVerified(config.adapter))) {
   throw new Error("adapter is not whitelisted on the underlying — every deposit would revert");
 }
-console.log(`Verified: per-deposit maturity, lockupPeriod ${lockupSeconds}s, adapter whitelisted`);
+console.log(`Verified: market-wide maturity pool, lockupPeriod ${lockupSeconds}s, adapter whitelisted`);
 
 // Merge rather than overwrite, so the record keeps every generation of this market.
 const outPath = `${deploymentDir}/real_estate_market.json`;
@@ -195,7 +200,7 @@ record[LABEL] = {
   underlying: underlyingAddress,
   factory: factoryAddress,
   lockupDays: Number(LOCKUP_DAYS),
-  maturityPerDeposit: true,
+  maturityPerDeposit: false,
 };
 writeFileSync(outPath, JSON.stringify(record, null, 2) + "\n");
 console.log("\nWrote", outPath);

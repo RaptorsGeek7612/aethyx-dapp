@@ -23,6 +23,10 @@ const GOLD_ASSET_ID_LABEL = "GOLD";
 // for why the gap between the two matters. Placeholder demo values, not a risk assessment.
 const MIN_COLLATERAL_RATIO_BPS = 15_000n;
 const LIQUIDATION_THRESHOLD_BPS = 13_000n;
+// 5% extra collateral, on top of the proportional share, for whoever liquidates — the
+// liquidator's incentive to act at all. See CDPManager.sol's liquidate() for how a partial
+// liquidation uses this. Placeholder demo value, not a risk assessment.
+const LIQUIDATION_BONUS_BPS = 500n;
 // 2%/year, linear, minted to Treasury as it accrues — see CDPManager.sol's _currentDebt natspec.
 const STABILITY_FEE_BPS = 200n;
 const DEBT_CEILING = 1_000_000n * 10n ** 18n;
@@ -165,6 +169,7 @@ if (existingCollateral.wrappedToken === ethers.ZeroAddress) {
         goldAsset.wrappedToken,
         MIN_COLLATERAL_RATIO_BPS,
         LIQUIDATION_THRESHOLD_BPS,
+        LIQUIDATION_BONUS_BPS,
         STABILITY_FEE_BPS,
         DEBT_CEILING,
       )

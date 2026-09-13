@@ -7,29 +7,24 @@ import { AssetAdapter } from "./AssetAdapter.sol";
 ///         détention minimale avant remboursement : le règlement d'une opération immobilière
 ///         (transfert de propriété, traitement notarial...) prend un temps réel, contrairement à
 ///         un actif purement numérique que l'on peut wrapper et dé-wrapper dans le même bloc.
-/// @dev Chaque dépôt porte sa propre échéance, comptée depuis **sa** date. La durée est la même
-///      pour tous — `lockupPeriod` est immuable, fixée au déploiement du marché — mais deux
-///      dépôts effectués à deux jours d'intervalle deviennent remboursables à deux jours
-///      d'intervalle. Un dépôt ultérieur ne repousse jamais un dépôt antérieur : la conception
-///      d'origine stockait un unique `lockedUntil` par adresse et l'écrasait à chaque dépôt, si
-///      bien qu'abonder une position presque échue la reverrouillait intégralement.
+/// @dev Échéancier commun au marché, pas par déposant. Voir AUDIT.md, constat n°1, pour
+///      l'historique complet de cet arbitrage : une version antérieure indexait le blocage sur
+///      l'adresse du déposant, ce qui se contournait entièrement par un simple auto-transfert vers
+///      une seconde adresse contrôlée par le même déposant (le token wrappé restant un ERC-20
+///      librement transférable, rien on-chain ne distingue cet auto-transfert d'une vente de gré à
+///      gré). La question n'est pas « qui a le droit de racheter » mais « à quelle vitesse le
+///      collatéral peut sortir » — c'est le règlement immobilier qui prend du temps, pas la
+///      personne. Chaque dépôt alimente donc une réserve commune qui mûrit après `lockupPeriod`,
+///      et tout remboursement puise dans la part déjà mûre, quel qu'en soit l'auteur : la seconde
+///      adresse d'un auto-transfert puise dans la même réserve que la première, et un acheteur de
+///      marché secondaire attend la maturité du marché comme n'importe quel déposant — la
+///      situation économiquement honnête, puisque le collatéral n'est réellement pas liquide avant
+///      et que le calendrier est lisible on-chain avant tout achat.
 ///
-///      Le remboursement est donc plafonné à ce qui est arrivé à échéance, et non bloqué en tout
-///      ou rien : un porteur dont la première tranche est mûre la retire pendant que la seconde
-///      finit de courir.
-///
-/// @dev **Contournement connu et assumé.** Suivre des échéances individuelles impose de les
-///      indexer sur l'adresse du déposant, et le token wrappé est un ERC-20 librement
-///      transférable : un déposant échappe à sa propre échéance en envoyant ses jetons à une
-///      seconde adresse qu'il contrôle, puis en remboursant depuis celle-ci, où aucune échéance
-///      n'a jamais été enregistrée. Rien on-chain ne distingue ce transfert d'une vente de gré à
-///      gré, qu'il faut bien laisser passer.
-///
-///      La seule forme non contournable — un échéancier commun au marché, où tout remboursement
-///      puise dans la part déjà mûre quel qu'en soit l'auteur — a existé ici et a été écartée :
-///      elle rend la contrainte réelle mais fait disparaître l'individualité des dépôts, qui est
-///      précisément ce que ce marché veut exprimer. L'arbitrage est tranché en faveur de
-///      l'individualité. Voir AUDIT.md, constat n°1.
+///      Conséquence assumée : les dépôts perdent leur individualité (deux dépôts à deux jours
+///      d'intervalle ne sont plus remboursables à deux jours d'intervalle, mais quand le pool
+///      commun atteint le montant voulu). C'est le prix de rendre le blocage réellement
+///      contraignant plutôt qu'une convention que seul un déposant non averti respecte.
 contract RealEstateAdapter is AssetAdapter {
     /// @notice Le blocage propre à un dépôt.
     /// @param amount Quantité bloquée, en 18 décimales canoniques.
@@ -43,27 +38,26 @@ contract RealEstateAdapter is AssetAdapter {
     ///         marché qui porte la durée, chaque dépôt qui porte sa date.
     uint256 public immutable lockupPeriod;
 
-    /// @dev En ajout seul, par déposant. `lockupPeriod` étant immuable, `unlockAt` est croissant
-    ///      le long du tableau : les échéances se balaient par l'avant et le balayage s'arrête à
-    ///      la première entrée encore bloquée, sans parcourir l'historique complet.
-    mapping(address depositor => Lock[]) private _locks;
+    /// @dev En ajout seul. `lockupPeriod` étant immuable, `unlockAt` est croissant le long du
+    ///      tableau : les échéances se balaient par l'avant et le balayage s'arrête à la première
+    ///      entrée encore bloquée, sans parcourir l'historique complet.
+    Lock[] private _locks;
     /// @dev Indice de la première entrée pas encore échue ; tout ce qui la précède a déjà été
     ///      balayé vers `maturedAmount` et n'est jamais revisité.
-    mapping(address depositor => uint256 cursor) private _cursor;
+    uint256 private _cursor;
 
-    /// @notice Dépôts de ce déposant dont l'échéance n'est pas atteinte, au dernier balayage.
-    ///         Préférer `lockedAmountOf` pour un chiffre à jour.
-    mapping(address depositor => uint256) public lockedAmount;
-    /// @notice Dépôts de ce déposant arrivés à échéance et non encore remboursés. Préférer
-    ///         `maturedAmountOf` pour un chiffre à jour.
-    mapping(address depositor => uint256) public maturedAmount;
+    /// @notice Dépôts du marché encore dans leur période de détention, au dernier balayage.
+    ///         Préférer `lockedAmountNow` pour un chiffre à jour.
+    uint256 public lockedAmount;
+    /// @notice Dépôts du marché arrivés à échéance et non encore remboursés, au dernier balayage.
+    ///         Préférer `maturedAmountNow` pour un chiffre à jour.
+    uint256 public maturedAmount;
 
-    /// @notice Le remboursement porte sur plus que ce qui est arrivé à échéance pour ce compte.
-    /// @param account Compte dont le remboursement est refusé.
+    /// @notice Le remboursement porte sur plus que ce que le pool commun a de mûr.
     /// @param requested Montant normalisé que la demande voulait libérer.
-    /// @param available Part de ses dépôts échue et non encore remboursée.
-    /// @param nextUnlockAt Échéance de sa tranche suivante, pour indiquer combien de temps attendre.
-    error StillLocked(address account, uint256 requested, uint256 available, uint256 nextUnlockAt);
+    /// @param available Part du pool échue et non encore remboursée.
+    /// @param nextUnlockAt Échéance de la prochaine tranche, pour indiquer combien de temps attendre.
+    error StillLocked(uint256 requested, uint256 available, uint256 nextUnlockAt);
 
     /// @param underlying_ Token immobilier ERC-3643 à prendre en garde.
     /// @param vaultManager_ VaultManager autorisé à piloter cet adaptateur.
@@ -79,100 +73,85 @@ contract RealEstateAdapter is AssetAdapter {
     }
 
     /// @inheritdoc AssetAdapter
-    /// @dev Ouvre une tranche portant sa propre échéance, sans toucher aux précédentes.
+    /// @dev Ouvre une tranche portant sa propre échéance dans le pool commun, sans toucher aux
+    ///      précédentes.
     function deposit(address from, uint256 amount) public override onlyVaultManager returns (uint256 normalizedAmount) {
         normalizedAmount = super.deposit(from, amount);
-        _locks[from].push(Lock({ amount: normalizedAmount, unlockAt: block.timestamp + lockupPeriod }));
-        lockedAmount[from] += normalizedAmount;
+        _locks.push(Lock({ amount: normalizedAmount, unlockAt: block.timestamp + lockupPeriod }));
+        lockedAmount += normalizedAmount;
     }
 
     /// @inheritdoc AssetAdapter
-    /// @dev Plafonne la libération aux tranches échues du compte, plutôt que de refuser en bloc.
+    /// @dev Plafonne la libération à ce que le pool commun a de mûr, sans égard pour qui appelle :
+    ///      c'est tout l'intérêt de cette version sur la précédente indexée par déposant.
     function withdraw(address to, uint256 normalizedAmount) public override onlyVaultManager returns (uint256 amount) {
-        _sweepMatured(to);
+        _sweepMatured();
 
-        uint256 matured = maturedAmount[to];
-        // Un porteur sans aucune tranche n'est soumis à rien : le token wrappé circule librement,
-        // et qui l'a acquis de gré à gré n'a jamais déposé ici. C'est aussi la porte que décrit la
-        // natspec du contrat — elle est assumée, pas ignorée.
-        if (lockedAmount[to] > 0 && normalizedAmount > matured) {
-            revert StillLocked(to, normalizedAmount, matured, nextUnlockAt(to));
+        if (normalizedAmount > maturedAmount) {
+            revert StillLocked(normalizedAmount, maturedAmount, nextUnlockAt());
         }
-
-        // Saturant : un remboursement peut légitimement dépasser le crédit du compte (jetons
-        // acquis de gré à gré en plus de ses propres dépôts échus), et l'excédent n'est pas suivi.
-        maturedAmount[to] = matured > normalizedAmount ? matured - normalizedAmount : 0;
+        maturedAmount -= normalizedAmount;
 
         return super.withdraw(to, normalizedAmount);
     }
 
-    /// @notice Dépôts de `depositor` encore dans leur période de détention, à l'instant.
-    /// @param depositor Déposant interrogé.
+    /// @notice Dépôts du marché encore dans leur période de détention, à l'instant.
     /// @return locked Montant encore bloqué, en 18 décimales canoniques.
-    function lockedAmountOf(address depositor) external view returns (uint256 locked) {
-        Lock[] storage locks = _locks[depositor];
-        for (uint256 i = _cursor[depositor]; i < locks.length; ++i) {
-            if (locks[i].unlockAt > block.timestamp) locked += locks[i].amount;
+    function lockedAmountNow() external view returns (uint256 locked) {
+        for (uint256 i = _cursor; i < _locks.length; ++i) {
+            if (_locks[i].unlockAt > block.timestamp) locked += _locks[i].amount;
         }
     }
 
-    /// @notice Dépôts de `depositor` arrivés à échéance et remboursables dès maintenant.
-    /// @param depositor Déposant interrogé.
+    /// @notice Dépôts du marché arrivés à échéance et remboursables dès maintenant.
     /// @return matured Montant remboursable, en 18 décimales canoniques.
-    function maturedAmountOf(address depositor) external view returns (uint256 matured) {
-        matured = maturedAmount[depositor];
-        Lock[] storage locks = _locks[depositor];
-        for (uint256 i = _cursor[depositor]; i < locks.length; ++i) {
-            if (locks[i].unlockAt <= block.timestamp) matured += locks[i].amount;
+    function maturedAmountNow() external view returns (uint256 matured) {
+        matured = maturedAmount;
+        for (uint256 i = _cursor; i < _locks.length; ++i) {
+            if (_locks[i].unlockAt <= block.timestamp) matured += _locks[i].amount;
         }
     }
 
-    /// @notice Échéance de la prochaine tranche de `depositor`, ou 0 s'il n'a rien de bloqué.
-    /// @param depositor Déposant interrogé.
+    /// @notice Échéance de la prochaine tranche du marché, ou 0 s'il n'y a plus rien de bloqué.
     /// @return Horodatage de la prochaine échéance, ou 0.
-    function nextUnlockAt(address depositor) public view returns (uint256) {
-        Lock[] storage locks = _locks[depositor];
-        for (uint256 i = _cursor[depositor]; i < locks.length; ++i) {
-            if (locks[i].unlockAt > block.timestamp) return locks[i].unlockAt;
+    function nextUnlockAt() public view returns (uint256) {
+        for (uint256 i = _cursor; i < _locks.length; ++i) {
+            if (_locks[i].unlockAt > block.timestamp) return _locks[i].unlockAt;
         }
         return 0;
     }
 
-    /// @notice Calendrier restant de `depositor` : une entrée par dépôt, avec sa propre échéance.
-    ///         C'est ce que lit l'interface pour dater chaque dépôt individuellement.
+    /// @notice Calendrier restant du marché : une entrée par dépôt, avec sa propre échéance.
     /// @dev Les tranches déjà remboursées au titre de `maturedAmount` ne sont pas retirées de
     ///      cette liste. Vue non bornée, prévue pour une lecture hors chaîne.
-    /// @param depositor Déposant interrogé.
     /// @return schedule Tranches restantes, dans l'ordre croissant d'échéance.
-    function lockSchedule(address depositor) external view returns (Lock[] memory schedule) {
-        Lock[] storage locks = _locks[depositor];
-        uint256 start = _cursor[depositor];
-        schedule = new Lock[](locks.length - start);
-        for (uint256 i = start; i < locks.length; ++i) {
-            schedule[i - start] = locks[i];
+    function lockSchedule() external view returns (Lock[] memory schedule) {
+        uint256 start = _cursor;
+        schedule = new Lock[](_locks.length - start);
+        for (uint256 i = start; i < _locks.length; ++i) {
+            schedule[i - start] = _locks[i];
         }
     }
 
     /// @dev Déplace hors de `lockedAmount` et vers `maturedAmount` toute tranche échue, en
     ///      avançant le curseur au-delà. S'arrête à la première entrée encore bloquée :
     ///      `unlockAt` étant croissant, rien de postérieur ne peut être échu plus tôt.
-    /// @param depositor Déposant dont on balaie le calendrier.
-    function _sweepMatured(address depositor) private {
-        Lock[] storage locks = _locks[depositor];
-        uint256 i = _cursor[depositor];
+    function _sweepMatured() private {
+        uint256 i = _cursor;
+        uint256 len = _locks.length;
         uint256 swept;
 
-        while (i < locks.length && locks[i].unlockAt <= block.timestamp) {
-            swept += locks[i].amount;
+        while (i < len && _locks[i].unlockAt <= block.timestamp) {
+            swept += _locks[i].amount;
             unchecked {
                 ++i;
             }
         }
 
         if (swept > 0) {
-            _cursor[depositor] = i;
-            lockedAmount[depositor] -= swept;
-            maturedAmount[depositor] += swept;
+            _cursor = i;
+            lockedAmount -= swept;
+            maturedAmount += swept;
         }
     }
 }

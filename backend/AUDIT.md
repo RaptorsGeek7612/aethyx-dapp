@@ -49,23 +49,42 @@ suppose d'obtenir d'abord le rachat de ces porteurs, puis de relancer le script.
 
 ---
 
-## 1. L'échéance immobilière se contourne par auto-transfert — **Élevée** · risque accepté
+## 1. L'échéance immobilière se contourne par auto-transfert — **Élevée** · résolu (2026-09-13)
 
-> **Mise à jour — risque accepté.** Après avoir été retiré puis rétabli, le mécanisme est
-> aujourd'hui une **échéance par dépôt** : même durée pour tous, comptée depuis la date de chaque
-> dépôt, si bien que deux dépôts espacés de trois jours deviennent remboursables à trois jours
-> d'intervalle. Marché en vigueur : `REAL_ESTATE_PARIS_01_V6`, adaptateur `0x2f118f11…A3eD`.
+> **Mise à jour — l'arbitrage a été retranché en faveur de la sécurité.** Trois versions de ce
+> mécanisme se sont succédé : échéancier commun au marché (implémenté, déployé) → écarté au
+> profit d'une échéance par dépôt pour préserver l'individualité des dépôts (constat rouvert
+> délibérément, voir l'historique conservé ci-dessous) → **échéancier commun rétabli**, cette fois
+> pour de bon, la sécurité l'emportant sur l'individualité. `RealEstateAdapter.sol` porte
+> aujourd'hui un pool commun au marché : chaque dépôt ouvre sa propre tranche dans un calendrier
+> partagé, mais tout remboursement puise dans la part déjà mûre du pool entier, quel qu'en soit
+> l'auteur — un auto-transfert vers une seconde adresse ne change plus rien, puisque cette seconde
+> adresse puise dans la même réserve que la première.
 >
-> Ce choix rouvre délibérément le constat ci-dessous. Des échéances individuelles doivent être
-> indexées sur l'adresse du déposant, et un jeton librement transférable permet d'en changer : le
-> contournement décrit plus bas fonctionne à nouveau. La seule parade — un échéancier commun au
-> marché — a été implémentée, déployée, puis écartée, parce qu'elle dissout précisément
-> l'individualité des dépôts que ce marché veut exprimer.
+> Conséquence assumée : les dépôts perdent leur individualité (deux dépôts à deux jours
+> d'intervalle ne sont plus remboursables à deux jours d'intervalle isolément, mais quand le pool
+> commun le permet). `lockedAmountOf(address)`/`maturedAmountOf(address)`/`nextUnlockAt(address)`/
+> `lockSchedule(address)` ont disparu au profit de `lockedAmountNow()`/`maturedAmountNow()`/
+> `nextUnlockAt()`/`lockSchedule()`, sans argument — signatures différentes plutôt qu'un
+> comportement qui change en silence sous la même ABI.
 >
-> L'arbitrage appartient au produit et il est tranché en faveur de l'individualité. Ce qui suit
-> reste donc à lire comme la description d'un risque **connu, mesuré et assumé**, pas d'un oubli.
-> Il est épinglé par un test (`test/RealEstateAdapter.ts`, « documents the accepted escape ») pour
-> qu'il ne puisse ni être oublié, ni être pris pour une régression.
+> Déployé comme `REAL_ESTATE_PARIS_01_V7` (voir `scripts/deploy-real-estate-market.ts`) ; `V6` et
+> les versions antérieures restent enregistrées et actives sur `VaultManager` — le frontend ne les
+> référence plus, mais quiconque détient déjà leur token wrappé peut encore les utiliser, avec le
+> contournement d'origine intact sur ces versions-là spécifiquement.
+>
+> `CDPManager` a aussi changé (voir constat n°12 : liquidation partielle) et doit être redéployé ;
+> si `V6` était enregistré comme collatéral CDP, migrer vers `V7` sur le nouveau `CDPManager`
+> plutôt que sur l'ancien.
+>
+> Le test qui documentait le contournement comme accepté (`test/RealEstateAdapter.ts`, « documents
+> the accepted escape ») a été remplacé par des tests qui vérifient l'inverse : l'auto-transfert
+> échoue avant maturité du pool, et le pool est bien partagé entre déposants indépendants — pas
+> seulement au sein d'un même compte.
+>
+> Historique conservé ci-dessous tel quel : c'est la description exacte du compromis qui a été
+> temporairement en vigueur, et la raison pour laquelle il a fallu choisir entre les deux
+> directions plutôt que les avoir simultanément reste valable.
 
 **Description.** Le blocage est indexé sur l'adresse qui *rachète*, pas sur les tokens. Un
 détenteur dont `lockedAmount` vaut zéro n'est soumis à aucune restriction. Or les tokens wrappés
@@ -503,6 +522,53 @@ contrôle local de `hardhat-verify` (`HHE80009`), pas d'un écart réel entre le
 le code source. Le comparateur de Sourcify lui-même n'a jamais vu de différence une fois la
 requête effectivement soumise ; `hardhat-verify` refusait simplement de tenter l'envoi. Contrat
 vérifié : https://repo.sourcify.dev/11155111/0x1cd0c39Df0135895b39cDf4f617b387607689B9D
+
+---
+
+## 12. `CDPManager` ne liquidait qu'en totalité — **Amélioration** · résolu (2026-09-13)
+
+**Contexte.** La première version de `CDPManager` (voir sa natspec) n'implémentait qu'une
+liquidation totale, délibérément : « squelette de première version, volontairement simplifié ».
+Un liquidateur devait détenir la dette entière d'une position pour agir du tout, ce qui exclut
+quiconque n'a pas cette somme, et concentre tout le collatéral saisi sur un seul liquidateur au
+lieu de le répartir entre plusieurs.
+
+**Changement.** `liquidate(user, collateralId, debtToRepay)` prend désormais un montant : le
+liquidateur choisit combien de dette rembourser (jusqu'à la dette due) et reçoit
+`collateralAmount * debtToRepay / debtAmount` de collatéral, majoré d'un nouveau
+`liquidationBonusBps` par collatéral — son incitation à agir. Rembourser l'intégralité de la dette
+reste possible et se comporte exactement comme l'ancienne liquidation totale : c'est le cas
+particulier `debtToRepay == debtAmount` de la même formule, sans perte d'arrondi
+(`collateralAmount * debtAmount / debtAmount == collateralAmount`).
+
+Le bonus est plafonné au collatéral réellement détenu par la position : une liquidation (totale ou
+partielle) sur une position déjà bien sous sa valeur d'origine donne tout ce qui reste, sans
+dépasser. Le manque au-delà, bonus compris, retombe dans le fonds d'assurance (constat n°8),
+inchangé.
+
+`addCollateralType`/`setCollateralParams` valident maintenant que
+`liquidationThresholdBps * (1 + liquidationBonusBps) ≤ minCollateralRatioBps` : sans cette borne,
+une position tout juste sous le seuil de liquidation ne pourrait jamais couvrir le bonus promis,
+même avant toute chute de prix. Nouvelle erreur `InvalidLiquidationBonus`.
+
+**Ce qui ne change pas.** Toujours pas d'enchères — un appelant propose son propre prix (celui de
+l'oracle au moment de l'appel), il ne le fixe pas. Une seule liquidation ne garantit pas non plus
+le retour à un ratio sain : retirer du collatéral majoré d'un bonus, à prix constant, baisse
+mécaniquement le ratio restant plutôt que de le remonter (démontré dans
+`test_PartialLiquidationSeizesProportionalCollateralPlusBonus`) — une position très dégradée peut
+demander plusieurs liquidations partielles, ou une totale, avant d'être saine ou fermée. C'est le
+comportement attendu des protocoles de prêt comparables (Aave, Compound), pas une régression.
+
+**Statut.** Résolu, testé (`test_PartialLiquidationSeizesProportionalCollateralPlusBonus`,
+`test_LiquidationBonusCappedAtRemainingCollateral`, `test_LiquidateRevertsOnZeroDebtToRepay`,
+`test_LiquidateRevertsWhenDebtToRepayExceedsDebt`,
+`test_AddCollateralTypeRevertsWhenLiquidationBonusTooHigh`), mais **pas encore déployé** : la
+signature de `liquidate` et la forme de `CollateralConfig` ont changé, ce qui casse l'ABI du
+`CDPManager` déjà en place sur Sepolia (`0xA3C28Deb0E34086cA7b69AD26c19Dcf78BbA2F1d`) — ces
+contrats ne sont pas mis à niveau sur place. Un nouveau `CDPManager` doit être déployé et les
+collatéraux (GOLD, SILVER, `REAL_ESTATE_PARIS_01_V7`) réenregistrés dessus ; la position ouverte
+sur l'ancien contrat reste utilisable (remboursement, retrait, liquidation) mais n'en migre pas
+automatiquement.
 
 ---
 
