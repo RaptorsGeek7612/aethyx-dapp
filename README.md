@@ -110,7 +110,13 @@ et une console de liquidation ouverte à quiconque.
 
 Déployé sur Sepolia par `scripts/deploy-cdp.ts`, avec `GOLD` comme premier collatéral (150 % /
 130 %, frais de stabilité 2 %/an, fonds d'assurance à 50 % du frais — voir `backend/AUDIT.md`,
-constat n°8) :
+constat n°8). Deux autres collatéraux ont été ajoutés depuis, chacun par son propre script :
+`SILVER` (`scripts/register-silver-collateral.ts`, mêmes paramètres que `GOLD`) et
+`REAL_ESTATE_PARIS_01_V6` (`scripts/register-real-estate-collateral.ts`, 200 % / 160 %, frais
+3 %/an — plus conservateur car ce marché n'a pas de prix de marché indépendant : son prix
+(estimation ÷ offre en circulation) doit être repoussé manuellement via
+`scripts/update-real-estate-price.ts` après chaque dépôt/rachat sur ce marché, sous peine de
+devenir obsolète) :
 
 | Composant | Adresse |
 |---|---|
