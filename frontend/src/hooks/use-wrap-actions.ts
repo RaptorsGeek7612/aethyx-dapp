@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { useConfig, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
+import { useQueryClient } from "@tanstack/react-query";
 import { BaseError } from "viem";
 import type { Address, Hex } from "viem";
 import { toast } from "sonner";
@@ -23,7 +24,17 @@ function humanizeError(error: unknown): string {
 export function useWrapActions() {
   const config = useConfig();
   const { writeContractAsync } = useWriteContract();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<WrapStep>("idle");
+
+  // useTransactionHistory only self-refreshes every 30s, which reads as broken right after the
+  // very deposit/redeem that should show up first — invalidating it here (its query key is shared
+  // by useAssetPositions, so this covers the ledger and My Deposits in one call) is what makes a
+  // just-confirmed transaction appear immediately instead of waiting out the poll.
+  const invalidateHistory = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: ["transactionHistory"] }),
+    [queryClient],
+  );
 
   const ensureAllowance = useCallback(
     async (token: Address, spender: Address, amount: bigint, currentAllowance: bigint) => {
@@ -61,6 +72,7 @@ export function useWrapActions() {
         setStep("confirming");
         await waitForTransactionReceipt(config, { hash });
         toast.success("Deposit confirmed");
+        invalidateHistory();
         params.onSuccess?.();
       } catch (error) {
         toast.error(humanizeError(error));
@@ -69,7 +81,7 @@ export function useWrapActions() {
         setStep("idle");
       }
     },
-    [config, ensureAllowance, writeContractAsync],
+    [config, ensureAllowance, invalidateHistory, writeContractAsync],
   );
 
   const redeem = useCallback(
@@ -97,6 +109,7 @@ export function useWrapActions() {
         setStep("confirming");
         await waitForTransactionReceipt(config, { hash });
         toast.success("Redemption confirmed");
+        invalidateHistory();
         params.onSuccess?.();
       } catch (error) {
         toast.error(humanizeError(error));
@@ -105,7 +118,7 @@ export function useWrapActions() {
         setStep("idle");
       }
     },
-    [config, ensureAllowance, writeContractAsync],
+    [config, ensureAllowance, invalidateHistory, writeContractAsync],
   );
 
   return { deposit, redeem, step };

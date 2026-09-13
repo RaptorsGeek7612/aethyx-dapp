@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { useConfig, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
+import { useQueryClient } from "@tanstack/react-query";
 import { BaseError } from "viem";
 import type { Address, Hex } from "viem";
 import { toast } from "sonner";
@@ -24,6 +25,7 @@ function humanizeError(error: unknown): string {
 export function useCdpActions() {
   const config = useConfig();
   const { writeContractAsync } = useWriteContract();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<CdpStep>("idle");
 
   const ensureAllowance = useCallback(
@@ -49,6 +51,9 @@ export function useCdpActions() {
         setStep("confirming");
         await waitForTransactionReceipt(config, { hash });
         toast.success(`${label} confirmed`);
+        // Same reasoning as useWrapActions: without this, a just-confirmed CDP action doesn't
+        // show up in the ledger until the next 30s poll.
+        queryClient.invalidateQueries({ queryKey: ["cdpActivity"] });
         onSuccess?.();
       } catch (error) {
         toast.error(humanizeError(error));
@@ -57,7 +62,7 @@ export function useCdpActions() {
         setStep("idle");
       }
     },
-    [config],
+    [config, queryClient],
   );
 
   const depositCollateral = useCallback(

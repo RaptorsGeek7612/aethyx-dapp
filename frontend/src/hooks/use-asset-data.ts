@@ -55,7 +55,11 @@ export function useAssetData(asset: AssetDefinition) {
         args: [account ?? ZERO_ADDRESS, VAULT_MANAGER_ADDRESS as Address],
       },
     ],
-    query: { enabled: canReadUserData },
+    // Balances here move from actions this hook has no way to know about — CDP collateral
+    // deposits/withdrawals move the same wrapped token but go through useCdpActions, not
+    // useWrapActions, so its refetch() never reaches this component. Polling is what keeps the
+    // portfolio row in sync with those instead of only updating on this asset's own dialog.
+    query: { enabled: canReadUserData, refetchInterval: 30_000 },
   });
 
   const data: AssetOnChainData = {

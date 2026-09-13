@@ -1,27 +1,34 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
-import { isAddress, type Address } from "viem";
-import { TriangleAlert, Crosshair } from "lucide-react";
+import { isAddress, type Address, type Hex } from "viem";
+import { TriangleAlert, Crosshair, Check } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { ASSETS } from "@/config/assets";
+import { ASSETS, type AssetDefinition } from "@/config/assets";
 import { isCdpConfigured } from "@/config/contracts";
 import { useCdpPosition } from "@/hooks/use-cdp";
 import { useCdpActions, type CdpStep } from "@/hooks/use-cdp-actions";
 import { useNow } from "@/hooks/use-now";
+import { useAssetPrice } from "@/hooks/use-asset-price";
 import { formatAmount, safeParseUnits } from "@/lib/format";
 import { cdpHealthSeverity, formatRatioPct } from "@/lib/cdp-health";
+import { cn } from "@/lib/utils";
 
 const NO_DEBT_RATIO = 2n ** 256n - 1n;
 
-// GOLD is the only collateral deploy-cdp.ts registers today — see backend/scripts/deploy-cdp.ts.
-// Reusing ASSETS[0] rather than hardcoding the id keeps this in lockstep with whatever label the
-// core protocol actually registers GOLD's wrapped token under.
-const COLLATERAL = ASSETS[0];
+const formatEur = (n: number) =>
+  n.toLocaleString(undefined, { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Every oracle-priced asset is a *candidate* collateral — deploy-cdp.ts only registers GOLD today
+// (see backend/scripts/deploy-cdp.ts), but the console shouldn't hardcode that: CollateralProbe
+// below checks each candidate's actual on-chain registration, so a future SILVER registration
+// shows up here with no frontend change. Real estate is excluded: it has no oracle spot price
+// (see AuditBadge/computeValuation), which this module's liquidation math depends on.
+const CDP_COLLATERAL_CANDIDATES = ASSETS.filter((asset) => asset.pricedByOracle);
 
 const STEP_LABEL: Partial<Record<CdpStep, string>> = {
   approving: "Approving…",
@@ -70,17 +77,99 @@ export function CdpConsole() {
   return <ConnectedConsole />;
 }
 
-function ConnectedConsole() {
-  const { data, registered, hasNoDebt, isLoading, refetch } = useCdpPosition(COLLATERAL.id);
-  const now = useNow(1000);
+interface CollateralStatus {
+  registered: boolean;
+  isLoading: boolean;
+}
 
-  if (!registered) {
-    return (
-      <div className="hud-panel p-10 text-center text-sm text-muted-foreground hud-scanlines">
-        {isLoading ? "Reading collateral registry…" : `${COLLATERAL.label} isn't registered as CDP collateral yet.`}
-      </div>
+/** No UI of its own — reads one candidate's registration status and reports it up, the same
+ *  "probe reports, parent decides" shape as ReserveValueReporter/PortfolioAssetRow. Lets the
+ *  selector below list every oracle-priced asset without assuming which ones are actually live. */
+function CollateralProbe({
+  asset,
+  onStatus,
+}: {
+  asset: AssetDefinition;
+  onStatus: (id: Hex, status: CollateralStatus) => void;
+}) {
+  const { registered, isLoading } = useCdpPosition(asset.id);
+
+  useEffect(() => {
+    onStatus(asset.id, { registered, isLoading });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asset.id, registered, isLoading]);
+
+  return null;
+}
+
+function ConnectedConsole() {
+  const [statuses, setStatuses] = useState<Record<string, CollateralStatus>>({});
+  const handleStatus = useCallback((id: Hex, status: CollateralStatus) => {
+    setStatuses((prev) =>
+      prev[id]?.registered === status.registered && prev[id]?.isLoading === status.isLoading
+        ? prev
+        : { ...prev, [id]: status },
     );
-  }
+  }, []);
+
+  const [selectedId, setSelectedId] = useState<Hex>(CDP_COLLATERAL_CANDIDATES[0].id);
+  const selected = CDP_COLLATERAL_CANDIDATES.find((asset) => asset.id === selectedId) ?? CDP_COLLATERAL_CANDIDATES[0];
+
+  const anyLoading = CDP_COLLATERAL_CANDIDATES.some((asset) => statuses[asset.id]?.isLoading !== false);
+  const anyRegistered = CDP_COLLATERAL_CANDIDATES.some((asset) => statuses[asset.id]?.registered);
+
+  return (
+    <div className="space-y-6">
+      {CDP_COLLATERAL_CANDIDATES.map((asset) => (
+        <CollateralProbe key={asset.id} asset={asset} onStatus={handleStatus} />
+      ))}
+
+      {CDP_COLLATERAL_CANDIDATES.length > 1 && (
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Collateral">
+          {CDP_COLLATERAL_CANDIDATES.map((asset) => {
+            const status = statuses[asset.id];
+            const isSelected = asset.id === selectedId;
+            const isAvailable = status?.registered ?? false;
+            return (
+              <button
+                key={asset.id}
+                type="button"
+                role="tab"
+                aria-selected={isSelected}
+                onClick={() => setSelectedId(asset.id)}
+                className={cn("hud-tag cursor-pointer transition-colors", isSelected && "text-primary")}
+                style={isSelected ? { ["--hud-accent" as string]: "var(--primary)" } : undefined}
+              >
+                {isSelected && <Check className="h-3 w-3" aria-hidden />}
+                {asset.title}
+                {status && !status.isLoading && !isAvailable && " · not available"}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {!anyRegistered && !anyLoading ? (
+        <div className="hud-panel p-10 text-center text-sm text-muted-foreground hud-scanlines">
+          No collateral is registered on this credit facility yet.
+        </div>
+      ) : !statuses[selectedId]?.registered ? (
+        <div className="hud-panel p-10 text-center text-sm text-muted-foreground hud-scanlines">
+          {statuses[selectedId]?.isLoading ?? true
+            ? "Reading collateral registry…"
+            : `${selected.label} isn't registered as eligible collateral yet — pick another above.`}
+        </div>
+      ) : (
+        <PositionConsole collateral={selected} />
+      )}
+    </div>
+  );
+}
+
+function PositionConsole({ collateral }: { collateral: AssetDefinition }) {
+  const { data, hasNoDebt, refetch } = useCdpPosition(collateral.id);
+  const { price: pricePerGram18, health: priceHealth } = useAssetPrice(collateral.id, collateral.pricedByOracle);
+  const now = useNow(1000);
 
   const severity = cdpHealthSeverity(
     data.ratioBps,
@@ -97,6 +186,13 @@ function ConnectedConsole() {
   const liqMarkerPct = Math.min((data.liquidationThresholdBps / gaugeMax) * 100, 100);
   const minMarkerPct = Math.min((data.minCollateralRatioBps / gaugeMax) * 100, 100);
 
+  // RWA value: grams of physical collateral locked, priced at the live oracle feed (EUR/gram).
+  // ioEUR is the money side, already 1:1 with EUR, so its own amount doubles as its currency value.
+  const collateralGrams = Number(data.collateralAmount) / 10 ** data.wrappedDecimals;
+  const collateralValueEur =
+    priceHealth === "healthy" ? collateralGrams * (Number(pricePerGram18) / 1e18) : null;
+  const debtValueEur = Number(data.currentDebt) / 10 ** data.stableDecimals;
+
   return (
     <div className="space-y-6">
       <div className="hud-panel p-6" style={{ ["--hud-accent" as string]: severity.color }}>
@@ -110,7 +206,7 @@ function ConnectedConsole() {
                 className="live-dot relative inline-flex h-1.5 w-1.5 rounded-full"
                 style={{ color: severity.color }}
               />
-              {COLLATERAL.label} / IOEUR
+              {collateral.label} / IOEUR
             </span>
             <span className="hud-tag" style={{ ["--hud-accent" as string]: severity.color }}>
               <severity.Icon className="h-3 w-3" aria-hidden />
@@ -124,14 +220,16 @@ function ConnectedConsole() {
 
         <div className="mt-6 grid gap-6 sm:grid-cols-3">
           <Readout
-            label="Collateral locked"
+            label="Collateral locked (RWA)"
             value={`${formatAmount(data.collateralAmount, data.wrappedDecimals)}`}
             unit={data.wrappedSymbol}
+            sub={collateralValueEur !== null ? formatEur(collateralValueEur) : "pricing…"}
           />
           <Readout
             label="Debt outstanding"
             value={formatAmount(data.currentDebt, data.stableDecimals)}
             unit={data.stableSymbol}
+            sub={formatEur(debtValueEur)}
           />
           <Readout
             label="Collateral ratio"
@@ -164,18 +262,30 @@ function ConnectedConsole() {
         {data.stabilityFeeBps > 0 && (
           <p className="mt-4 text-xs text-muted-foreground">
             Stability fee {(data.stabilityFeeBps / 100).toFixed(2)}%/year, accruing continuously and paid to the
-            Treasury as it settles — see the <span className="hud-readout">currentDebt</span> reading above.
+            Treasury as it settles. See the <span className="hud-readout">currentDebt</span> reading above.
           </p>
         )}
       </div>
 
-      <CommandConsole refetch={refetch} />
-      <LiquidationConsole />
+      <CommandConsole collateral={collateral} refetch={refetch} />
+      <LiquidationConsole collateral={collateral} />
     </div>
   );
 }
 
-function Readout({ label, value, unit, accent }: { label: string; value: string; unit: string; accent?: string }) {
+function Readout({
+  label,
+  value,
+  unit,
+  sub,
+  accent,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  sub?: string;
+  accent?: string;
+}) {
   return (
     <div>
       <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
@@ -183,13 +293,15 @@ function Readout({ label, value, unit, accent }: { label: string; value: string;
         {value}
       </p>
       <p className="text-xs text-muted-foreground">{unit}</p>
+      {sub && <p className="hud-readout mt-0.5 text-xs text-foreground/70">{sub}</p>}
     </div>
   );
 }
 
-function CommandConsole({ refetch }: { refetch: () => void }) {
-  const { data } = useCdpPosition(COLLATERAL.id);
+function CommandConsole({ collateral, refetch }: { collateral: AssetDefinition; refetch: () => void }) {
+  const { data } = useCdpPosition(collateral.id);
   const { depositCollateral, withdrawCollateral, mintDebt, repayDebt, step } = useCdpActions();
+  const { price: pricePerGram18, health: priceHealth } = useAssetPrice(collateral.id, collateral.pricedByOracle);
 
   const [depositAmount, setDepositAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
@@ -203,6 +315,21 @@ function CommandConsole({ refetch }: { refetch: () => void }) {
   const withdrawBn = safeParseUnits(withdrawAmount, data.wrappedDecimals);
   const mintBn = safeParseUnits(mintAmount, data.stableDecimals);
   const repayBn = safeParseUnits(repayAmount, data.stableDecimals);
+
+  // Every tab's headroom, derived from the same position data the readouts above already show —
+  // "how much more can I do here" is the state a depositor actually wants before typing a number.
+  const priceEurPerGram = Number(pricePerGram18) / 1e18;
+  const collateralGrams = Number(data.collateralAmount) / 10 ** data.wrappedDecimals;
+  const collateralValueEur = priceHealth === "healthy" ? collateralGrams * priceEurPerGram : null;
+  const debtValueEur = Number(data.currentDebt) / 10 ** data.stableDecimals;
+  const minRatio = data.minCollateralRatioBps / 10_000;
+
+  const maxMintableEur =
+    collateralValueEur !== null ? Math.max(collateralValueEur / minRatio - debtValueEur, 0) : null;
+  const maxWithdrawableTokens =
+    collateralValueEur !== null && priceEurPerGram > 0
+      ? Math.min(Math.max(collateralValueEur - debtValueEur * minRatio, 0) / priceEurPerGram, collateralGrams)
+      : null;
 
   return (
     <div className="hud-panel p-6">
@@ -220,6 +347,14 @@ function CommandConsole({ refetch }: { refetch: () => void }) {
         </TabsList>
 
         <TabsContent value="deposit" className="space-y-3 pt-4">
+          <ActionState
+            lines={[
+              `Currently locked: ${formatAmount(data.collateralAmount, data.wrappedDecimals)} ${data.wrappedSymbol}${
+                collateralValueEur !== null ? ` (${formatEur(collateralValueEur)})` : ""
+              }`,
+              !data.active && "This collateral is frozen — new deposits are refused until it's reactivated.",
+            ]}
+          />
           <AmountField
             id="cdp-deposit"
             label={`Amount (${data.wrappedSymbol})`}
@@ -235,7 +370,7 @@ function CommandConsole({ refetch }: { refetch: () => void }) {
             onClick={async () => {
               if (!depositBn) return;
               await depositCollateral({
-                collateralId: COLLATERAL.id,
+                collateralId: collateral.id,
                 amount: depositBn,
                 wrappedToken: data.wrappedToken,
                 currentAllowance: data.wrappedAllowanceForCdp,
@@ -251,6 +386,15 @@ function CommandConsole({ refetch }: { refetch: () => void }) {
         </TabsContent>
 
         <TabsContent value="mint" className="space-y-3 pt-4">
+          <ActionState
+            lines={[
+              `Debt outstanding: ${formatAmount(data.currentDebt, data.stableDecimals)} ${data.stableSymbol}`,
+              maxMintableEur !== null
+                ? `Room to mint at ${(data.minCollateralRatioBps / 100).toFixed(0)}% min ratio: ${formatEur(maxMintableEur)}`
+                : "Room to mint: pricing…",
+              !data.active && "This collateral is frozen — new debt can't be minted against it.",
+            ]}
+          />
           <AmountField
             id="cdp-mint"
             label={`Amount (${data.stableSymbol})`}
@@ -259,13 +403,29 @@ function CommandConsole({ refetch }: { refetch: () => void }) {
             decimals={data.stableDecimals}
             disabled={busy}
           />
+          {mintBn !== null && mintBn > 0n && (
+            <p className="hud-readout text-xs text-muted-foreground">
+              ≈{" "}
+              {priceEurPerGram > 0
+                ? (Number(mintBn) / 10 ** data.stableDecimals / priceEurPerGram).toLocaleString(undefined, {
+                    maximumFractionDigits: 4,
+                  })
+                : "…"}{" "}
+              {data.wrappedSymbol} of collateral value · ratio{" "}
+              {debtValueEur > 0 && collateralValueEur !== null ? `${((collateralValueEur / debtValueEur) * 100).toFixed(0)}%` : "∞"}
+              {" → "}
+              {collateralValueEur !== null
+                ? `${((collateralValueEur / (debtValueEur + Number(mintBn) / 10 ** data.stableDecimals)) * 100).toFixed(0)}%`
+                : "…"}
+            </p>
+          )}
           <Button
             className="w-full"
             disabled={!mintBn || busy || !data.active}
             onClick={async () => {
               if (!mintBn) return;
               await mintDebt({
-                collateralId: COLLATERAL.id,
+                collateralId: collateral.id,
                 amount: mintBn,
                 onSuccess: () => {
                   setMintAmount("");
@@ -279,6 +439,12 @@ function CommandConsole({ refetch }: { refetch: () => void }) {
         </TabsContent>
 
         <TabsContent value="repay" className="space-y-3 pt-4">
+          <ActionState
+            lines={[
+              `Debt outstanding: ${formatAmount(data.currentDebt, data.stableDecimals)} ${data.stableSymbol} (${formatEur(debtValueEur)})`,
+              data.currentDebt === 0n && "Nothing to repay.",
+            ]}
+          />
           <AmountField
             id="cdp-repay"
             label={`Amount (${data.stableSymbol})`}
@@ -295,7 +461,7 @@ function CommandConsole({ refetch }: { refetch: () => void }) {
             onClick={async () => {
               if (!repayBn) return;
               await repayDebt({
-                collateralId: COLLATERAL.id,
+                collateralId: collateral.id,
                 amount: repayBn,
                 currentAllowance: data.stableAllowanceForCdp,
                 onSuccess: () => {
@@ -310,6 +476,18 @@ function CommandConsole({ refetch }: { refetch: () => void }) {
         </TabsContent>
 
         <TabsContent value="withdraw" className="space-y-3 pt-4">
+          <ActionState
+            lines={[
+              `Currently locked (RWA): ${formatAmount(data.collateralAmount, data.wrappedDecimals)} ${data.wrappedSymbol}${
+                collateralValueEur !== null ? ` (${formatEur(collateralValueEur)})` : ""
+              }`,
+              maxWithdrawableTokens !== null
+                ? `Withdrawable while staying above ${(data.minCollateralRatioBps / 100).toFixed(0)}%: ${maxWithdrawableTokens.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${data.wrappedSymbol}${
+                    priceHealth === "healthy" ? ` (${formatEur(maxWithdrawableTokens * priceEurPerGram)})` : ""
+                  }`
+                : "Withdrawable: pricing…",
+            ]}
+          />
           <AmountField
             id="cdp-withdraw"
             label={`Amount (${data.wrappedSymbol})`}
@@ -326,7 +504,7 @@ function CommandConsole({ refetch }: { refetch: () => void }) {
             onClick={async () => {
               if (!withdrawBn) return;
               await withdrawCollateral({
-                collateralId: COLLATERAL.id,
+                collateralId: collateral.id,
                 amount: withdrawBn,
                 onSuccess: () => {
                   setWithdrawAmount("");
@@ -349,13 +527,19 @@ function CommandConsole({ refetch }: { refetch: () => void }) {
  * doesn't require going to a block explorer. Looks up an arbitrary address's position and, when
  * it's actually liquidatable, lets the connected wallet repay its debt and take its collateral.
  */
-function LiquidationConsole() {
+function LiquidationConsole({ collateral }: { collateral: AssetDefinition }) {
   const { address: connected } = useAccount();
   const [target, setTarget] = useState("");
   const { liquidate, step } = useCdpActions();
 
   const targetAddress = isAddress(target) ? (target as Address) : undefined;
-  const { data, hasNoDebt, isLoading } = useCdpPosition(COLLATERAL.id, targetAddress);
+  const { data, hasNoDebt, isLoading } = useCdpPosition(collateral.id, targetAddress);
+  const { price: pricePerGram18, health: priceHealth } = useAssetPrice(collateral.id, collateral.pricedByOracle);
+
+  const targetCollateralGrams = Number(data.collateralAmount) / 10 ** data.wrappedDecimals;
+  const targetCollateralValueEur =
+    priceHealth === "healthy" ? targetCollateralGrams * (Number(pricePerGram18) / 1e18) : null;
+  const targetDebtValueEur = Number(data.currentDebt) / 10 ** data.stableDecimals;
 
   const severity = useMemo(
     () => cdpHealthSeverity(data.ratioBps, NO_DEBT_RATIO, data.minCollateralRatioBps, data.liquidationThresholdBps),
@@ -376,8 +560,8 @@ function LiquidationConsole() {
         <h2 className="hud-readout text-sm font-semibold uppercase tracking-[0.08em]">Liquidation console</h2>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        Anyone can close out a position below {(data.liquidationThresholdBps / 100).toFixed(0)}% collateralization —
-        look one up by address.
+        Anyone can close out a position below {(data.liquidationThresholdBps / 100).toFixed(0)}% collateralization.
+        Look one up by address.
       </p>
 
       <div className="mt-4 space-y-1.5">
@@ -399,11 +583,17 @@ function LiquidationConsole() {
       {targetAddress && (
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           <Readout
-            label="Collateral"
+            label="Collateral (RWA)"
             value={formatAmount(data.collateralAmount, data.wrappedDecimals)}
             unit={data.wrappedSymbol}
+            sub={targetCollateralValueEur !== null ? formatEur(targetCollateralValueEur) : "pricing…"}
           />
-          <Readout label="Debt" value={formatAmount(data.currentDebt, data.stableDecimals)} unit={data.stableSymbol} />
+          <Readout
+            label="Debt"
+            value={formatAmount(data.currentDebt, data.stableDecimals)}
+            unit={data.stableSymbol}
+            sub={formatEur(targetDebtValueEur)}
+          />
           <Readout
             label="Ratio"
             value={isLoading ? "…" : formatRatioPct(data.ratioBps, NO_DEBT_RATIO)}
@@ -420,7 +610,7 @@ function LiquidationConsole() {
         onClick={async () => {
           if (!targetAddress) return;
           await liquidate({
-            collateralId: COLLATERAL.id,
+            collateralId: collateral.id,
             user: targetAddress,
             debtToRepay: data.currentDebt,
             currentAllowance: data.stableAllowanceForCdp,
@@ -437,6 +627,20 @@ function LiquidationConsole() {
       {connected && targetAddress === connected && (
         <p className="mt-2 text-xs text-muted-foreground">That&apos;s your own address.</p>
       )}
+    </div>
+  );
+}
+
+/** The state relevant to one tab's action — current numbers and headroom — surfaced above the
+ *  input instead of leaving each tab as a bare field with no sense of what's actually possible. */
+function ActionState({ lines }: { lines: Array<string | false | undefined> }) {
+  const visible = lines.filter((line): line is string => Boolean(line));
+  if (visible.length === 0) return null;
+  return (
+    <div className="hud-readout space-y-0.5 text-xs text-muted-foreground">
+      {visible.map((line, index) => (
+        <p key={index}>{line}</p>
+      ))}
     </div>
   );
 }

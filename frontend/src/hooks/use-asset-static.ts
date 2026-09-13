@@ -84,7 +84,10 @@ export function useAssetStaticData(asset: AssetDefinition) {
       { address: wrappedToken, abi: erc20Abi, functionName: "totalSupply" },
       { address: underlying, abi: erc20Abi, functionName: "balanceOf", args: [adapter] },
     ],
-    query: { enabled: canReadTokenData },
+    // These are the numbers a proof-of-reserve view exists to show as live: total supply and
+    // locked collateral move with every deposit/redeem, by any wallet, not just the one connected
+    // here — without polling this only ever reflected whatever was true at page load.
+    query: { enabled: canReadTokenData, refetchInterval: 30_000 },
   });
 
   const data: AssetStaticData = {

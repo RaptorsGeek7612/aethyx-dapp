@@ -35,16 +35,26 @@ export function PortfolioSummary() {
 
   const entries = Object.values(metrics);
 
-  const totalValue = useMemo(() => entries.reduce((sum, m) => sum + m.valueEur, 0), [entries]);
+  // Gross assets (wallet + whatever's locked as Credit Facility collateral) minus ioEUR debt
+  // minted against them — a mint has to show up here as a deduction, not vanish, or the total
+  // reads as if borrowing were free money. See feedback from 2026-09-13: "les mints doivent être
+  // cohérents, et systématiquement déduits".
+  const grossValue = useMemo(
+    () => entries.reduce((sum, m) => sum + m.valueEur + m.cdpCollateralValueEur, 0),
+    [entries],
+  );
+  const totalDebt = useMemo(() => entries.reduce((sum, m) => sum + m.cdpDebtValueEur, 0), [entries]);
+  const totalValue = grossValue - totalDebt;
 
   const weightedChangePct = useMemo(() => {
-    if (totalValue <= 0) return null;
+    if (grossValue <= 0) return null;
     const weighted = entries.reduce(
-      (sum, m) => sum + (m.changeBps !== null ? (Number(m.changeBps) / 100) * m.valueEur : 0),
+      (sum, m) =>
+        sum + (m.changeBps !== null ? (Number(m.changeBps) / 100) * (m.valueEur + m.cdpCollateralValueEur) : 0),
       0,
     );
-    return weighted / totalValue;
-  }, [entries, totalValue]);
+    return weighted / grossValue;
+  }, [entries, grossValue]);
 
   const totalLocked = useMemo(() => entries.reduce((sum, m) => sum + m.lockedNormalized, 0n), [entries]);
   const totalSupply = useMemo(() => entries.reduce((sum, m) => sum + m.wrappedSupply, 0n), [entries]);
@@ -53,7 +63,7 @@ export function PortfolioSummary() {
   const oracleHealth = aggregateOracleHealth(entries.map((m) => m.oracleHealth));
 
   const formatEur = (n: number) =>
-    n.toLocaleString(undefined, { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+    n.toLocaleString(undefined, { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <motion.div variants={staggerContainer(0.08)} initial="hidden" animate="visible" className="space-y-5">
@@ -67,7 +77,7 @@ export function PortfolioSummary() {
             <AnimatedNumber
               value={totalValue}
               format={formatEur}
-              className="text-ink num-live text-5xl font-semibold"
+              className="num-live bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-5xl font-semibold text-transparent"
             />
             {weightedChangePct !== null && (
               <motion.span
@@ -84,6 +94,12 @@ export function PortfolioSummary() {
           </div>
         ) : (
           <p className="mt-1 text-sm text-muted-foreground">Connect your wallet to see your portfolio value.</p>
+        )}
+
+        {isConnected && totalDebt > 0 && (
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            {formatEur(grossValue)} in assets − {formatEur(totalDebt)} in ioEUR Credit Facility debt
+          </p>
         )}
 
         <div className="mt-5 divide-y divide-hairline">

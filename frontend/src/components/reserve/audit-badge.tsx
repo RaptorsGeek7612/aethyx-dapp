@@ -26,7 +26,7 @@ export function AuditBadge({ attestation }: { attestation?: Attestation }) {
         Attested off-chain by {attestation.auditor}, as of {attestation.asOf}
         {attestation.reportUrl && (
           <>
-            {" — "}
+            {" · "}
             <a href={attestation.reportUrl} target="_blank" rel="noreferrer" className="underline hover:text-primary">
               report
             </a>

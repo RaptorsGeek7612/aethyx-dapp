@@ -21,10 +21,10 @@ export default function Home() {
             variants={fadeUp}
             className="mt-3 bg-gradient-to-br from-foreground via-foreground to-foreground/60 bg-clip-text text-4xl font-semibold tracking-tight text-transparent sm:text-5xl"
           >
-            Dashboard
+            Portfolio Overview
           </motion.h1>
           <motion.p variants={fadeUp} className="mt-4 max-w-xl text-sm text-muted-foreground">
-            Deposit a compliant ERC-3643 asset, receive its 1:1-backed ERC-20 equivalent, and track its live value —
+            Deposit a compliant ERC-3643 asset, receive its 1:1-backed ERC-20 equivalent, and track its live value,
             always redeemable back into the underlying asset.
           </motion.p>
         </motion.section>
@@ -39,7 +39,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-hairline py-6 text-center text-xs text-muted-foreground">
-        AETHYX Gateway — every wrapped token is backed 1:1 by collateral locked on-chain.
+        AETHYX Gateway. Every wrapped token is backed 1:1 by collateral locked on-chain.
       </footer>
     </div>
   );

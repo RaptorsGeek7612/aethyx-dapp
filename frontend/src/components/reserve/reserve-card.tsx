@@ -1,19 +1,54 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Lock, Package } from "lucide-react";
+import { useReadContract } from "wagmi";
+import type { Address } from "viem";
+import { Lock, Package, Euro, Wallet, Landmark } from "lucide-react";
 import { StatTile } from "@/components/reserve/stat-tile";
 import { CoverageMeter } from "@/components/reserve/coverage-meter";
 import { AuditBadge } from "@/components/reserve/audit-badge";
 import type { AssetDefinition } from "@/config/assets";
 import { useAssetStaticData } from "@/hooks/use-asset-static";
+import { useAssetPrice } from "@/hooks/use-asset-price";
+import { erc20Abi } from "@/lib/abis/erc20Abi";
+import { cdpManagerAbi } from "@/lib/abis/cdpManagerAbi";
+import { CDP_MANAGER_ADDRESS, isCdpConfigured } from "@/config/contracts";
+import { ZERO_ADDRESS } from "@/hooks/use-asset-static";
 import { formatAmount, formatCompactAmount } from "@/lib/format";
 import { toCanonical18 } from "@/lib/decimals";
 import { KIND_META } from "@/lib/asset-kind-meta";
 
+const formatEur = (n: number, maximumFractionDigits = 2) =>
+  n.toLocaleString(undefined, { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits });
+
 export function ReserveCard({ asset, index }: { asset: AssetDefinition; index: number }) {
   const { data, isLoading } = useAssetStaticData(asset);
+  const { price: pricePerGram18, health: priceHealth } = useAssetPrice(asset.id, asset.pricedByOracle);
   const Icon = KIND_META[asset.kind].icon;
+
+  // Not gated on asset.pricedByOracle: whichever assets CDPManager actually recognizes as
+  // collateral show up here on their own, the same "ask the contract, don't hardcode the list"
+  // approach the /cdp collateral selector uses.
+  const { data: cdpCollateral } = useReadContract({
+    address: CDP_MANAGER_ADDRESS as Address,
+    abi: cdpManagerAbi,
+    functionName: "collaterals",
+    args: [asset.id],
+    // totalDebt moves with every mint/repay on this collateral, by any wallet — same "this is
+    // supposed to read as live" reasoning as useAssetStaticData's tokenData query.
+    query: { enabled: isCdpConfigured, refetchInterval: 30_000 },
+  });
+  const cdpWrappedToken = cdpCollateral?.[0] ?? ZERO_ADDRESS;
+  const cdpRegistered = cdpWrappedToken !== ZERO_ADDRESS;
+  const ioEurMinted = cdpCollateral?.[5] ?? 0n;
+
+  const { data: cdpLockedBalance } = useReadContract({
+    address: cdpWrappedToken,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: [CDP_MANAGER_ADDRESS as Address],
+    query: { enabled: cdpRegistered, refetchInterval: 30_000 },
+  });
 
   const lockedNormalized = toCanonical18(data.lockedRaw, data.underlyingDecimals);
   const coverageBps = data.wrappedSupply > 0n ? (lockedNormalized * 10_000n) / data.wrappedSupply : null;
@@ -25,6 +60,17 @@ export function ReserveCard({ asset, index }: { asset: AssetDefinition; index: n
         return `${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${asset.physicalUnit.label}`;
       })()
     : null;
+
+  // Whole-reserve EUR value: oracle price × grams held for gold/silver, the full static
+  // appraisal for real estate (there's only one holder of the whole building here — the reserve
+  // itself — unlike the dashboard's per-wallet share of the same appraisal).
+  const pricePerGramEur = Number(pricePerGram18) / 1e18;
+  const reserveValueEur =
+    asset.kind === "real-estate"
+      ? (asset.appraisalValueEur ?? null)
+      : priceHealth === "healthy"
+        ? (Number(data.lockedRaw) / 10 ** data.underlyingDecimals) * pricePerGramEur
+        : null;
 
   return (
     <motion.div
@@ -49,6 +95,15 @@ export function ReserveCard({ asset, index }: { asset: AssetDefinition; index: n
         <p className="mt-6 text-sm text-muted-foreground">This asset isn&apos;t registered on VaultManager yet.</p>
       ) : (
         <div className="mt-5 grid grid-cols-2 gap-3">
+          <StatTile
+            label="Reserve value"
+            icon={<Euro className="h-3 w-3" />}
+            value={reserveValueEur !== null ? formatEur(reserveValueEur) : "Pricing…"}
+            sublabel={
+              asset.kind === "real-estate" ? "Static appraisal" : `at ${formatEur(pricePerGramEur, 2)}/g, live oracle`
+            }
+            loading={isLoading}
+          />
           {reserveValue && (
             <StatTile label="Reserve" icon={<Package className="h-3 w-3" />} value={reserveValue} loading={isLoading} />
           )}
@@ -61,11 +116,23 @@ export function ReserveCard({ asset, index }: { asset: AssetDefinition; index: n
           />
           <StatTile
             label={`${data.wrappedSymbol || "Wrapped"} minted`}
+            icon={<Wallet className="h-3 w-3" />}
             value={`${formatCompactAmount(data.wrappedSupply, data.wrappedDecimals)} ${data.wrappedSymbol}`}
             sublabel={`${formatAmount(data.wrappedSupply, data.wrappedDecimals)} ${data.wrappedSymbol}`}
             loading={isLoading}
           />
           <CoverageMeter coverageBps={coverageBps} loading={isLoading} />
+          {cdpRegistered && (
+            <div className="col-span-2">
+              <StatTile
+                label="ioEUR backing"
+                icon={<Landmark className="h-3 w-3" />}
+                value={`${formatAmount(ioEurMinted, 18)} ioEUR minted`}
+                sublabel={`against ${formatAmount(cdpLockedBalance ?? 0n, data.wrappedDecimals)} ${data.wrappedSymbol} locked as collateral · ${formatAmount(data.wrappedSupply - (cdpLockedBalance ?? 0n), data.wrappedDecimals)} ${data.wrappedSymbol} still free of the ${formatAmount(data.wrappedSupply, data.wrappedDecimals)} ${data.wrappedSymbol} minted`}
+                loading={isLoading}
+              />
+            </div>
+          )}
           <div className="col-span-2">
             <AuditBadge attestation={asset.attestation} />
           </div>

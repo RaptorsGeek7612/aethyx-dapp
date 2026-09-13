@@ -34,8 +34,8 @@ export function ReserveTotal() {
 
       <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Total reserve value</p>
       {haveAllValues ? (
-        <p className="text-ink num-live mt-1 text-5xl font-semibold">
-          {total.toLocaleString(undefined, { style: "currency", currency: "EUR", maximumFractionDigits: 0 })}
+        <p className="num-live mt-1 bg-gradient-to-b from-foreground to-foreground/70 bg-clip-text text-5xl font-semibold text-transparent">
+          {total.toLocaleString(undefined, { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </p>
       ) : (
         <Skeleton className="mt-2 h-10 w-48" />
@@ -44,12 +44,12 @@ export function ReserveTotal() {
       {degraded ? (
         <p className="mt-2 flex items-center gap-1.5 text-xs text-status-warning">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          The gold and/or silver price feed has too few fresh sources right now — the total above excludes them until
+          The gold and/or silver price feed has too few fresh sources right now. The total above excludes them until
           the oracle recovers, so it under-states actual reserve value.
         </p>
       ) : (
         <p className="mt-2 text-xs text-muted-foreground">
-          Sum of collateral actually locked across every registered asset — gold and silver valued at the live oracle
+          Sum of collateral actually locked across every registered asset: gold and silver valued at the live oracle
           price, real estate at its static appraisal.
         </p>
       )}

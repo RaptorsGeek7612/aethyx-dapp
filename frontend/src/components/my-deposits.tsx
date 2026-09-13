@@ -114,7 +114,7 @@ export function MyDeposits({
       {drift !== 0n && (
         <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
           Your wallet holds {formatAmount(walletBalance, 18)} {symbol}, {drift > 0n ? "more" : "less"} than the{" "}
-          {formatAmount(totalRemaining, 18)} above — {symbol} is a freely transferable ERC-20, so tokens moved in or out
+          {formatAmount(totalRemaining, 18)} above. {symbol} is a freely transferable ERC-20, so tokens moved in or out
           of this wallet leave no deposit record. Redemptions are attributed to the oldest deposit first.
         </p>
       )}

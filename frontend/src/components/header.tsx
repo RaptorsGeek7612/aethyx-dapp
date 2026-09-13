@@ -9,9 +9,9 @@ import { cn } from "@/lib/utils";
 import { EASE_OUT } from "@/lib/motion";
 
 const NAV_LINKS = [
-  { href: "/", label: "Dashboard" },
-  { href: "/reserve", label: "Proof of Reserve" },
-  { href: "/cdp", label: "CDP" },
+  { href: "/", label: "Portfolio" },
+  { href: "/reserve", label: "Reserve" },
+  { href: "/cdp", label: "Credit" },
 ];
 
 export function Header() {
@@ -40,11 +40,28 @@ export function Header() {
         <div className="flex items-center gap-8">
           <div className="flex items-center gap-2.5">
             <motion.div
-              whileHover={{ rotate: -6, scale: 1.06 }}
+              whileHover={{ rotate: -6, scale: 1.1 }}
               transition={{ type: "spring", stiffness: 380, damping: 18 }}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-amber-700 shadow-lg shadow-primary/25"
+              className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-inset/60 shadow-[0_0_18px_-4px_oklch(0.795_0.16_82/0.75)] ring-1 ring-primary/25"
             >
-              <span className="text-sm font-bold text-primary-foreground">AX</span>
+              {/* No letterform: an asymmetric low-poly crystal, each facet a distinct shade of the
+                  same gradient rather than one smooth fill — the cut-gem-as-data-shard read this
+                  brand wants is in that faceting, not in spelling out a name. */}
+              <svg viewBox="0 0 32 32" className="h-6 w-6 drop-shadow-[0_0_6px_oklch(0.795_0.16_82/0.6)]" aria-hidden>
+                <polygon points="16,2 27,11 15,15" fill="#fde68a" />
+                <polygon points="27,11 24,26 15,15" fill="#f59e0b" />
+                <polygon points="24,26 12,30 15,15" fill="#b45309" />
+                <polygon points="12,30 4,20 15,15" fill="#9a3412" />
+                <polygon points="4,20 6,9 15,15" fill="#d97706" />
+                <polygon points="6,9 16,2 15,15" fill="#fbbf24" />
+                <polygon
+                  points="16,2 27,11 24,26 12,30 4,20 6,9"
+                  fill="none"
+                  stroke="oklch(0.99 0.01 90)"
+                  strokeWidth="1"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </motion.div>
             <div className="flex flex-col leading-none">
               <span className="text-sm font-semibold tracking-tight">AETHYX</span>

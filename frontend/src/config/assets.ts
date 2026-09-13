@@ -99,9 +99,17 @@ export const ASSETS: AssetDefinition[] = [
     // five ways across the lock-up tiers precisely so summing them didn't multiply the building
     // by five.
     appraisalValueEur: 235_000,
+    // Not "priced by oracle" in the gold/silver sense (there's no independent market price — see
+    // computeValuation's real-estate branch, which never reads OracleManager). Set to true only
+    // once backend/scripts/register-real-estate-collateral.ts has actually registered a price
+    // source for this assetId (appraisal ÷ current supply, pushed manually — see that script's
+    // header): that's what makes it show up as a CDP collateral candidate at all. Before that
+    // script has run, OracleManager.getPrice reverts for this id and every consumer already
+    // handles that as "unavailable", same as a stale gold/silver feed.
+    pricedByOracle: true,
     attestation: {
       verified: true,
-      auditor: "Notaire de Paris — Étude XYZ",
+      auditor: "Notaire de Paris · Étude XYZ",
       asOf: "2026-06-15",
     },
   },
