@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Lock, Unlock } from "lucide-react";
+import { Lock } from "lucide-react";
 import type { AssetDefinition } from "@/config/assets";
 import { useAssetPositions } from "@/hooks/use-asset-positions";
 import { useLockSchedule } from "@/hooks/use-lock-schedule";
@@ -39,11 +39,14 @@ export function MyDeposits({
   const open = positions.filter((position) => position.remaining > 0n);
   const drift = walletBalance - totalRemaining;
 
-  // Les tranches encore bloquées sont les plus récentes : l'adaptateur les ouvre dans l'ordre des
-  // dépôts et les purge par l'avant. Aligner la fin des deux listes redonne donc à chaque dépôt
-  // son échéance, sans identifiant partagé entre un événement et un tableau de stockage.
-  const firstLockedIndex = positions.length - tranches.length;
-  const maturityOf = (index: number) => (index >= firstLockedIndex ? tranches[index - firstLockedIndex] : undefined);
+  // Maturity is a market-wide pool now (AUDIT.md finding 1: a per-depositor schedule was
+  // reversible by self-transfer), so it can no longer be attributed to any one numbered position
+  // below — the previous "align the tail of both lists" trick assumed `tranches` was this
+  // wallet's own schedule, which stopped being true the moment it became the whole market's. What
+  // *can* still be said accurately, from the same tranches this hook already fetched, is the
+  // pool's aggregate state.
+  const lockedTotal = tranches.reduce((sum, t) => (t.unlockAt > nowSeconds ? sum + t.amount : sum), 0n);
+  const nextUnlockAt = tranches.find((t) => t.unlockAt > nowSeconds)?.unlockAt;
 
   return (
     <div className="panel p-4">
@@ -60,9 +63,7 @@ export function MyDeposits({
         animate="visible"
         className="mt-2 space-y-1 text-xs"
       >
-        {positions.map((position, index) => {
-          const maturity = maturityOf(index);
-          const locked = maturity !== undefined && maturity.unlockAt > nowSeconds;
+        {positions.map((position) => {
           const spent = position.remaining === 0n;
 
           return (
@@ -72,11 +73,6 @@ export function MyDeposits({
               href={`https://sepolia.etherscan.io/tx/${position.transactionHash}`}
               target="_blank"
               rel="noopener noreferrer"
-              title={
-                maturity
-                  ? `Redeemable from ${new Date(Number(maturity.unlockAt) * 1000).toLocaleString()}`
-                  : "Redeemable now"
-              }
               className={`flex items-center gap-3 rounded-md px-1.5 py-1.5 transition-colors hover:bg-white/5 ${
                 spent ? "text-muted-foreground line-through decoration-1" : ""
               }`}
@@ -86,19 +82,6 @@ export function MyDeposits({
               <span className="num flex-1 truncate">
                 {formatAmount(position.remaining, 18)} / {formatAmount(position.received, 18)} {symbol}
               </span>
-
-              {!spent &&
-                (locked ? (
-                  <span className="flex shrink-0 items-center gap-1 text-status-warning">
-                    <Lock className="h-3 w-3" aria-hidden />
-                    <span className="num">{formatCountdown(maturity.unlockAt, nowSeconds)}</span>
-                  </span>
-                ) : (
-                  <span className="flex shrink-0 items-center gap-1 text-status-good">
-                    <Unlock className="h-3 w-3" aria-hidden />
-                    redeemable
-                  </span>
-                ))}
             </motion.a>
           );
         })}
@@ -110,6 +93,16 @@ export function MyDeposits({
           {formatAmount(totalRemaining, 18)} {symbol}
         </span>
       </div>
+
+      {tranches.length > 0 && (
+        <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <Lock className="h-3 w-3 shrink-0" aria-hidden />
+          {asset.title}&apos;s lock-up is market-wide, not per deposit: {formatAmount(lockedTotal, 18)} {symbol} is
+          still locked across every depositor
+          {nextUnlockAt !== undefined && <>, next unlock in {formatCountdown(nextUnlockAt, nowSeconds)}</>}. A
+          redemption draws from whatever the whole market has matured, not from your own deposits specifically.
+        </p>
+      )}
 
       {drift !== 0n && (
         <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">

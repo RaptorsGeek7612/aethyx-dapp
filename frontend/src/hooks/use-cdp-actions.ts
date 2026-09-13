@@ -157,7 +157,7 @@ export function useCdpActions() {
             address: CDP_MANAGER_ADDRESS as Address,
             abi: cdpManagerAbi,
             functionName: "liquidate",
-            args: [params.user, params.collateralId],
+            args: [params.user, params.collateralId, params.debtToRepay],
           }),
         params.onSuccess,
       );

@@ -72,11 +72,6 @@ export const realEstateAdapterAbi = [
   {
     inputs: [
       {
-        internalType: "address",
-        name: "account",
-        type: "address",
-      },
-      {
         internalType: "uint256",
         name: "requested",
         type: "uint256",
@@ -138,13 +133,7 @@ export const realEstateAdapterAbi = [
     type: "function",
   },
   {
-    inputs: [
-      {
-        internalType: "address",
-        name: "depositor",
-        type: "address",
-      },
-    ],
+    inputs: [],
     name: "lockSchedule",
     outputs: [
       {
@@ -169,13 +158,7 @@ export const realEstateAdapterAbi = [
     type: "function",
   },
   {
-    inputs: [
-      {
-        internalType: "address",
-        name: "depositor",
-        type: "address",
-      },
-    ],
+    inputs: [],
     name: "lockedAmount",
     outputs: [
       {
@@ -188,14 +171,8 @@ export const realEstateAdapterAbi = [
     type: "function",
   },
   {
-    inputs: [
-      {
-        internalType: "address",
-        name: "depositor",
-        type: "address",
-      },
-    ],
-    name: "lockedAmountOf",
+    inputs: [],
+    name: "lockedAmountNow",
     outputs: [
       {
         internalType: "uint256",
@@ -220,13 +197,7 @@ export const realEstateAdapterAbi = [
     type: "function",
   },
   {
-    inputs: [
-      {
-        internalType: "address",
-        name: "depositor",
-        type: "address",
-      },
-    ],
+    inputs: [],
     name: "maturedAmount",
     outputs: [
       {
@@ -239,14 +210,8 @@ export const realEstateAdapterAbi = [
     type: "function",
   },
   {
-    inputs: [
-      {
-        internalType: "address",
-        name: "depositor",
-        type: "address",
-      },
-    ],
-    name: "maturedAmountOf",
+    inputs: [],
+    name: "maturedAmountNow",
     outputs: [
       {
         internalType: "uint256",
@@ -258,13 +223,7 @@ export const realEstateAdapterAbi = [
     type: "function",
   },
   {
-    inputs: [
-      {
-        internalType: "address",
-        name: "depositor",
-        type: "address",
-      },
-    ],
+    inputs: [],
     name: "nextUnlockAt",
     outputs: [
       {

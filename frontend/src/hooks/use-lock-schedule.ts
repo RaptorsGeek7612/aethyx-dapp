@@ -1,7 +1,6 @@
 "use client";
 
 import { useAccount, useReadContract } from "wagmi";
-import type { Address } from "viem";
 import { realEstateAdapterAbi } from "@/lib/abis/realEstateAdapterAbi";
 import type { AssetDefinition } from "@/config/assets";
 import { useAssetStaticData, ZERO_ADDRESS } from "@/hooks/use-asset-static";
@@ -12,8 +11,10 @@ export interface Tranche {
 }
 
 /**
- * Les tranches encore bloquées du porteur connecté sur `asset`, chacune avec sa propre échéance —
- * la source de vérité pour dater un dépôt individuellement.
+ * Les tranches encore bloquées du marché de `asset`, chacune avec sa propre échéance — la source
+ * de vérité pour dater un dépôt individuellement. Commun au marché, pas au porteur connecté :
+ * voir AUDIT.md, constat n°1, pour pourquoi une échéance indexée sur l'adresse se contournait par
+ * un simple auto-transfert.
  *
  * `lockSchedule` ne renvoie que ce qui n'a pas encore été balayé vers le montant échu, donc la
  * liste raccourcit d'elle-même à mesure que les échéances tombent. Elle est ordonnée de la plus
@@ -24,17 +25,19 @@ export interface Tranche {
  * fonction, et `useReadContract` n'est simplement pas activé pour eux.
  */
 export function useLockSchedule(asset: AssetDefinition) {
-  const { address: account } = useAccount();
+  const { isConnected } = useAccount();
   const { data: staticData } = useAssetStaticData(asset);
 
   const enabled =
-    asset.kind === "real-estate" && staticData.registered && staticData.adapter !== ZERO_ADDRESS && Boolean(account);
+    asset.kind === "real-estate" &&
+    staticData.registered &&
+    staticData.adapter !== ZERO_ADDRESS &&
+    Boolean(isConnected);
 
   const { data, refetch } = useReadContract({
     address: staticData.adapter,
     abi: realEstateAdapterAbi,
     functionName: "lockSchedule",
-    args: [(account ?? ZERO_ADDRESS) as Address],
     query: { enabled, refetchInterval: 30_000 },
   });
 

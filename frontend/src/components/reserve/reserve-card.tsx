@@ -40,7 +40,7 @@ export function ReserveCard({ asset, index }: { asset: AssetDefinition; index: n
   });
   const cdpWrappedToken = cdpCollateral?.[0] ?? ZERO_ADDRESS;
   const cdpRegistered = cdpWrappedToken !== ZERO_ADDRESS;
-  const ioEurMinted = cdpCollateral?.[5] ?? 0n;
+  const ioEurMinted = cdpCollateral?.[6] ?? 0n;
 
   const { data: cdpLockedBalance } = useReadContract({
     address: cdpWrappedToken,

@@ -15,6 +15,9 @@ export interface CdpPosition {
   stableDecimals: number;
   minCollateralRatioBps: number;
   liquidationThresholdBps: number;
+  /** Extra collateral, on top of the proportional share, a liquidator receives — see
+   *  CDPManager.sol's liquidate() natspec. */
+  liquidationBonusBps: number;
   stabilityFeeBps: number;
   active: boolean;
   /** Collateral locked by the connected wallet, in the wrapped token's own decimals. */
@@ -71,8 +74,9 @@ export function useCdpPosition(collateralId: Hex, subject?: Address) {
   const wrappedToken = collateral?.[0] ?? ZERO_ADDRESS;
   const minCollateralRatioBps = Number(collateral?.[1] ?? 0);
   const liquidationThresholdBps = Number(collateral?.[2] ?? 0);
-  const stabilityFeeBps = Number(collateral?.[3] ?? 0);
-  const active = collateral?.[6] ?? false;
+  const liquidationBonusBps = Number(collateral?.[3] ?? 0);
+  const stabilityFeeBps = Number(collateral?.[4] ?? 0);
+  const active = collateral?.[7] ?? false;
   const registered = wrappedToken !== ZERO_ADDRESS;
 
   const canReadPosition = registered && Boolean(account);
@@ -139,6 +143,7 @@ export function useCdpPosition(collateralId: Hex, subject?: Address) {
     stableDecimals: Number(details?.[3]?.result ?? 18),
     minCollateralRatioBps,
     liquidationThresholdBps,
+    liquidationBonusBps,
     stabilityFeeBps,
     active,
     collateralAmount: position?.[0] ?? 0n,

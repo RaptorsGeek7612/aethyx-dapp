@@ -11,6 +11,7 @@ export const cdpManagerAbi = [
       { name: "wrappedToken", type: "address" },
       { name: "minCollateralRatioBps", type: "uint16" },
       { name: "liquidationThresholdBps", type: "uint16" },
+      { name: "liquidationBonusBps", type: "uint16" },
       { name: "stabilityFeeBps", type: "uint16" },
       { name: "debtCeiling", type: "uint256" },
       { name: "totalDebt", type: "uint256" },
@@ -98,6 +99,7 @@ export const cdpManagerAbi = [
     inputs: [
       { name: "user", type: "address" },
       { name: "collateralId", type: "bytes32" },
+      { name: "debtToRepay", type: "uint256" },
     ],
     outputs: [],
   },
