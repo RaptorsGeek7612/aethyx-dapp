@@ -461,7 +461,7 @@ utilisateur n'était en jeu.
 
 ---
 
-## 11. `RealEstateAssetFactory` V6 ne se vérifie pas sur Sourcify — **Non exploitable** · non résolu
+## 11. `RealEstateAssetFactory` V6 ne se vérifie pas sur Sourcify — **Non exploitable** · résolu
 
 **Localisation** : `0x1cd0c39Df0135895b39cDf4f617b387607689B9D` (fabrique du marché
 `REAL_ESTATE_PARIS_01_V6`), découvert en vérifiant a posteriori l'ensemble des contrats déployés
@@ -494,10 +494,15 @@ vérification de la fabrique *elle-même* qui échoue, sans qu'on sache dire si 
 détail de compilation (réglages d'optimiseur, ordre de résolution des imports) propre à ce
 contrat, ou une limite du contrôle local de `hardhat-verify` sur la troncature des métadonnées.
 
-**Statut.** Non résolu. Aucun impact fonctionnel identifié — c'est un écart de vérification,
-pas un signe de code périmé ou de comportement incorrect. À reprendre si quelqu'un a le temps
-d'isoler la cause exacte, ou d'essayer une resoumission directe à l'API Sourcify en contournant
-le contrôle local de `hardhat-verify`.
+**Statut.** Résolu (2026-09-13) en suivant la piste laissée ouverte ci-dessus : une soumission
+directe à `POST /v2/verify/{chainId}/{address}` de l'API Sourcify, avec le `stdJsonInput` complet
+tiré de `artifacts/build-info/` et `contractIdentifier: "project/contracts/RealEstateAssetFactory.sol:RealEstateAssetFactory"`,
+a produit un **match complet** (`creationMatch`/`runtimeMatch`: `"match"`, pas seulement
+`"partial"`) — confirmant que les 32 octets non expliqués provenaient bien d'une limite du
+contrôle local de `hardhat-verify` (`HHE80009`), pas d'un écart réel entre le bytecode déployé et
+le code source. Le comparateur de Sourcify lui-même n'a jamais vu de différence une fois la
+requête effectivement soumise ; `hardhat-verify` refusait simplement de tenter l'envoi. Contrat
+vérifié : https://repo.sourcify.dev/11155111/0x1cd0c39Df0135895b39cDf4f617b387607689B9D
 
 ---
 
