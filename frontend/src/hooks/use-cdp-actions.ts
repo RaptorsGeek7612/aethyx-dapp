@@ -8,10 +8,12 @@ import { BaseError } from "viem";
 import type { Address, Hex } from "viem";
 import { toast } from "sonner";
 import { erc20Abi } from "@/lib/abis/erc20Abi";
-import { cdpManagerAbi } from "@/lib/abis/cdpManagerAbi";
-import { CDP_MANAGER_ADDRESS, STABLE_TOKEN_ADDRESS } from "@/config/contracts";
+import { cdpManagerAbi, cdpManagerLegacyAbi } from "@/lib/abis/cdpManagerAbi";
+import { CDP_MANAGER_ADDRESS, STABLE_TOKEN_ADDRESS, type CdpManagerRef } from "@/config/contracts";
 
 export type CdpStep = "idle" | "approving" | "submitting" | "confirming";
+
+const CURRENT_MANAGER: CdpManagerRef = { address: CDP_MANAGER_ADDRESS as Address, label: "Current", legacy: false };
 
 function humanizeError(error: unknown): string {
   if (error instanceof BaseError) return error.shortMessage ?? error.message;
@@ -21,12 +23,15 @@ function humanizeError(error: unknown): string {
 
 /** Deposit/mint/repay/withdraw/liquidate against CDPManager — same approve-then-call shape as
  *  useWrapActions, against a different pair of spenders (the wrapped token for collateral, the
- *  stablecoin for debt). */
-export function useCdpActions() {
+ *  stablecoin for debt). Defaults to the current CDPManager; pass a legacy ref (see
+ *  CDP_MANAGERS in config/contracts.ts) to act on a position still open on a superseded
+ *  instance — liquidate() there takes two arguments, not three, see cdpManagerLegacyAbi. */
+export function useCdpActions(manager: CdpManagerRef = CURRENT_MANAGER) {
   const config = useConfig();
   const { writeContractAsync } = useWriteContract();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<CdpStep>("idle");
+  const abi = manager.legacy ? cdpManagerLegacyAbi : cdpManagerAbi;
 
   const ensureAllowance = useCallback(
     async (token: Address, amount: bigint, currentAllowance: bigint) => {
@@ -36,11 +41,11 @@ export function useCdpActions() {
         address: token,
         abi: erc20Abi,
         functionName: "approve",
-        args: [CDP_MANAGER_ADDRESS as Address, amount],
+        args: [manager.address, amount],
       });
       await waitForTransactionReceipt(config, { hash });
     },
-    [config, writeContractAsync],
+    [config, manager.address, writeContractAsync],
   );
 
   const run = useCallback(
@@ -78,15 +83,15 @@ export function useCdpActions() {
         "Deposit",
         () =>
           writeContractAsync({
-            address: CDP_MANAGER_ADDRESS as Address,
-            abi: cdpManagerAbi,
+            address: manager.address,
+            abi,
             functionName: "depositCollateral",
             args: [params.collateralId, params.amount],
           }),
         params.onSuccess,
       );
     },
-    [ensureAllowance, run, writeContractAsync],
+    [abi, ensureAllowance, manager.address, run, writeContractAsync],
   );
 
   const withdrawCollateral = useCallback(
@@ -95,15 +100,15 @@ export function useCdpActions() {
         "Withdrawal",
         () =>
           writeContractAsync({
-            address: CDP_MANAGER_ADDRESS as Address,
-            abi: cdpManagerAbi,
+            address: manager.address,
+            abi,
             functionName: "withdrawCollateral",
             args: [params.collateralId, params.amount],
           }),
         params.onSuccess,
       );
     },
-    [run, writeContractAsync],
+    [abi, manager.address, run, writeContractAsync],
   );
 
   const mintDebt = useCallback(
@@ -112,15 +117,15 @@ export function useCdpActions() {
         "Mint",
         () =>
           writeContractAsync({
-            address: CDP_MANAGER_ADDRESS as Address,
-            abi: cdpManagerAbi,
+            address: manager.address,
+            abi,
             functionName: "mintDebt",
             args: [params.collateralId, params.amount],
           }),
         params.onSuccess,
       );
     },
-    [run, writeContractAsync],
+    [abi, manager.address, run, writeContractAsync],
   );
 
   const repayDebt = useCallback(
@@ -130,15 +135,15 @@ export function useCdpActions() {
         "Repayment",
         () =>
           writeContractAsync({
-            address: CDP_MANAGER_ADDRESS as Address,
-            abi: cdpManagerAbi,
+            address: manager.address,
+            abi,
             functionName: "repayDebt",
             args: [params.collateralId, params.amount],
           }),
         params.onSuccess,
       );
     },
-    [ensureAllowance, run, writeContractAsync],
+    [abi, ensureAllowance, manager.address, run, writeContractAsync],
   );
 
   const liquidate = useCallback(
@@ -153,16 +158,23 @@ export function useCdpActions() {
       await run(
         "Liquidation",
         () =>
-          writeContractAsync({
-            address: CDP_MANAGER_ADDRESS as Address,
-            abi: cdpManagerAbi,
-            functionName: "liquidate",
-            args: [params.user, params.collateralId, params.debtToRepay],
-          }),
+          manager.legacy
+            ? writeContractAsync({
+                address: manager.address,
+                abi: cdpManagerLegacyAbi,
+                functionName: "liquidate",
+                args: [params.user, params.collateralId],
+              })
+            : writeContractAsync({
+                address: manager.address,
+                abi: cdpManagerAbi,
+                functionName: "liquidate",
+                args: [params.user, params.collateralId, params.debtToRepay],
+              }),
         params.onSuccess,
       );
     },
-    [ensureAllowance, run, writeContractAsync],
+    [ensureAllowance, manager.address, manager.legacy, run, writeContractAsync],
   );
 
   return { depositCollateral, withdrawCollateral, mintDebt, repayDebt, liquidate, step };

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ASSETS, type AssetDefinition } from "@/config/assets";
-import { isCdpConfigured } from "@/config/contracts";
+import { isCdpConfigured, CDP_MANAGERS, type CdpManagerRef } from "@/config/contracts";
 import { useCdpPosition } from "@/hooks/use-cdp";
 import { useCdpActions, type CdpStep } from "@/hooks/use-cdp-actions";
 import { useNow } from "@/hooks/use-now";
@@ -82,67 +82,93 @@ interface CollateralStatus {
   isLoading: boolean;
 }
 
-/** No UI of its own — reads one candidate's registration status and reports it up, the same
- *  "probe reports, parent decides" shape as ReserveValueReporter/PortfolioAssetRow. Lets the
- *  selector below list every oracle-priced asset without assuming which ones are actually live. */
+// `${assetId}:${managerAddress}` — one status per (candidate, CDPManager instance) pair, since
+// the same asset can be registered on the current manager, a retired one, both, or neither.
+function statusKey(assetId: Hex, managerAddress: string) {
+  return `${assetId}:${managerAddress}`;
+}
+
+/** No UI of its own — reads one candidate's registration status on one CDPManager instance and
+ *  reports it up, the same "probe reports, parent decides" shape as ReserveValueReporter/
+ *  PortfolioAssetRow. Lets the selector below list every (asset, manager) pair without assuming
+ *  which ones are actually live — including collateral left registered on a superseded manager
+ *  (see CDP_MANAGERS in config/contracts.ts, AUDIT.md #12). */
 function CollateralProbe({
   asset,
+  manager,
   onStatus,
 }: {
   asset: AssetDefinition;
-  onStatus: (id: Hex, status: CollateralStatus) => void;
+  manager: CdpManagerRef;
+  onStatus: (key: string, status: CollateralStatus) => void;
 }) {
-  const { registered, isLoading } = useCdpPosition(asset.id);
+  const { registered, isLoading } = useCdpPosition(asset.id, undefined, manager);
+  const key = statusKey(asset.id, manager.address);
 
   useEffect(() => {
-    onStatus(asset.id, { registered, isLoading });
+    onStatus(key, { registered, isLoading });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [asset.id, registered, isLoading]);
+  }, [key, registered, isLoading]);
 
   return null;
 }
 
 function ConnectedConsole() {
   const [statuses, setStatuses] = useState<Record<string, CollateralStatus>>({});
-  const handleStatus = useCallback((id: Hex, status: CollateralStatus) => {
+  const handleStatus = useCallback((key: string, status: CollateralStatus) => {
     setStatuses((prev) =>
-      prev[id]?.registered === status.registered && prev[id]?.isLoading === status.isLoading
+      prev[key]?.registered === status.registered && prev[key]?.isLoading === status.isLoading
         ? prev
-        : { ...prev, [id]: status },
+        : { ...prev, [key]: status },
     );
   }, []);
 
   const [selectedId, setSelectedId] = useState<Hex>(CDP_COLLATERAL_CANDIDATES[0].id);
   const selected = CDP_COLLATERAL_CANDIDATES.find((asset) => asset.id === selectedId) ?? CDP_COLLATERAL_CANDIDATES[0];
 
-  const anyLoading = CDP_COLLATERAL_CANDIDATES.some((asset) => statuses[asset.id]?.isLoading !== false);
-  const anyRegistered = CDP_COLLATERAL_CANDIDATES.some((asset) => statuses[asset.id]?.registered);
+  const isAvailable = (assetId: Hex) => CDP_MANAGERS.some((m) => statuses[statusKey(assetId, m.address)]?.registered);
+  const isAssetLoading = (assetId: Hex) => CDP_MANAGERS.some((m) => statuses[statusKey(assetId, m.address)]?.isLoading !== false);
+
+  const anyLoading = CDP_COLLATERAL_CANDIDATES.some((asset) => isAssetLoading(asset.id));
+  const anyRegistered = CDP_COLLATERAL_CANDIDATES.some((asset) => isAvailable(asset.id));
+
+  // CDP_MANAGERS lists the current instance first, so this prefers it whenever the selected
+  // asset is registered there too — legacy only wins when that's the sole place it still lives.
+  const availableManagers = CDP_MANAGERS.filter((m) => statuses[statusKey(selected.id, m.address)]?.registered);
+  const [selectedManagerAddress, setSelectedManagerAddress] = useState<string | null>(null);
+  const selectedManager =
+    availableManagers.find((m) => m.address === selectedManagerAddress) ?? availableManagers[0];
 
   return (
     <div className="space-y-6">
-      {CDP_COLLATERAL_CANDIDATES.map((asset) => (
-        <CollateralProbe key={asset.id} asset={asset} onStatus={handleStatus} />
-      ))}
+      {CDP_COLLATERAL_CANDIDATES.flatMap((asset) =>
+        CDP_MANAGERS.map((manager) => (
+          <CollateralProbe key={statusKey(asset.id, manager.address)} asset={asset} manager={manager} onStatus={handleStatus} />
+        )),
+      )}
 
       {CDP_COLLATERAL_CANDIDATES.length > 1 && (
         <div className="flex flex-wrap gap-2" role="tablist" aria-label="Collateral">
           {CDP_COLLATERAL_CANDIDATES.map((asset) => {
-            const status = statuses[asset.id];
             const isSelected = asset.id === selectedId;
-            const isAvailable = status?.registered ?? false;
+            const available = isAvailable(asset.id);
+            const loading = isAssetLoading(asset.id);
             return (
               <button
                 key={asset.id}
                 type="button"
                 role="tab"
                 aria-selected={isSelected}
-                onClick={() => setSelectedId(asset.id)}
+                onClick={() => {
+                  setSelectedId(asset.id);
+                  setSelectedManagerAddress(null);
+                }}
                 className={cn("hud-tag cursor-pointer transition-colors", isSelected && "text-primary")}
                 style={isSelected ? { ["--hud-accent" as string]: "var(--primary)" } : undefined}
               >
                 {isSelected && <Check className="h-3 w-3" aria-hidden />}
                 {asset.title}
-                {status && !status.isLoading && !isAvailable && " · not available"}
+                {!loading && !available && " · not available"}
               </button>
             );
           })}
@@ -153,21 +179,48 @@ function ConnectedConsole() {
         <div className="hud-panel p-10 text-center text-sm text-muted-foreground hud-scanlines">
           No collateral is registered on this credit facility yet.
         </div>
-      ) : !statuses[selectedId]?.registered ? (
+      ) : !selectedManager ? (
         <div className="hud-panel p-10 text-center text-sm text-muted-foreground hud-scanlines">
-          {statuses[selectedId]?.isLoading ?? true
+          {isAssetLoading(selected.id)
             ? "Reading collateral registry…"
             : `${selected.label} isn't registered as eligible collateral yet — pick another above.`}
         </div>
       ) : (
-        <PositionConsole collateral={selected} />
+        <div className="space-y-4">
+          {availableManagers.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">Instance:</span>
+              <div className="flex flex-wrap gap-2" role="tablist" aria-label="CDPManager instance">
+                {availableManagers.map((manager) => {
+                  const isSelected = manager.address === selectedManager.address;
+                  return (
+                    <button
+                      key={manager.address}
+                      type="button"
+                      role="tab"
+                      aria-selected={isSelected}
+                      onClick={() => setSelectedManagerAddress(manager.address)}
+                      className={cn("hud-tag cursor-pointer transition-colors", isSelected && "text-primary")}
+                      style={isSelected ? { ["--hud-accent" as string]: "var(--primary)" } : undefined}
+                    >
+                      {isSelected && <Check className="h-3 w-3" aria-hidden />}
+                      {manager.label}
+                      {manager.legacy && " (retired — repay/withdraw/liquidate only)"}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <PositionConsole collateral={selected} manager={selectedManager} />
+        </div>
       )}
     </div>
   );
 }
 
-function PositionConsole({ collateral }: { collateral: AssetDefinition }) {
-  const { data, hasNoDebt, refetch } = useCdpPosition(collateral.id);
+function PositionConsole({ collateral, manager }: { collateral: AssetDefinition; manager: CdpManagerRef }) {
+  const { data, hasNoDebt, refetch } = useCdpPosition(collateral.id, undefined, manager);
   const { price: pricePerGram18, health: priceHealth } = useAssetPrice(collateral.id, collateral.pricedByOracle);
   const now = useNow(1000);
 
@@ -267,8 +320,21 @@ function PositionConsole({ collateral }: { collateral: AssetDefinition }) {
         )}
       </div>
 
-      <CommandConsole collateral={collateral} refetch={refetch} />
-      <LiquidationConsole collateral={collateral} />
+      {manager.legacy && (
+        <div
+          className="hud-panel flex items-start gap-3 p-4 text-sm"
+          style={{ ["--hud-accent" as string]: "var(--status-warning)" }}
+        >
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-status-warning" />
+          <p className="text-muted-foreground">
+            This is a retired CDPManager instance ({manager.address}) — new deposits and borrows go through the
+            current instance instead. Existing collateral here can still be repaid, withdrawn, or liquidated.
+          </p>
+        </div>
+      )}
+
+      <CommandConsole collateral={collateral} manager={manager} refetch={refetch} />
+      <LiquidationConsole collateral={collateral} manager={manager} />
     </div>
   );
 }
@@ -298,9 +364,17 @@ function Readout({
   );
 }
 
-function CommandConsole({ collateral, refetch }: { collateral: AssetDefinition; refetch: () => void }) {
-  const { data } = useCdpPosition(collateral.id);
-  const { depositCollateral, withdrawCollateral, mintDebt, repayDebt, step } = useCdpActions();
+function CommandConsole({
+  collateral,
+  manager,
+  refetch,
+}: {
+  collateral: AssetDefinition;
+  manager: CdpManagerRef;
+  refetch: () => void;
+}) {
+  const { data } = useCdpPosition(collateral.id, undefined, manager);
+  const { depositCollateral, withdrawCollateral, mintDebt, repayDebt, step } = useCdpActions(manager);
   const { price: pricePerGram18, health: priceHealth } = useAssetPrice(collateral.id, collateral.pricedByOracle);
 
   const [depositAmount, setDepositAmount] = useState("");
@@ -353,6 +427,7 @@ function CommandConsole({ collateral, refetch }: { collateral: AssetDefinition; 
                 collateralValueEur !== null ? ` (${formatEur(collateralValueEur)})` : ""
               }`,
               !data.active && "This collateral is frozen — new deposits are refused until it's reactivated.",
+              manager.legacy && "This instance is retired — deposit on the current instance instead.",
             ]}
           />
           <AmountField
@@ -362,11 +437,11 @@ function CommandConsole({ collateral, refetch }: { collateral: AssetDefinition; 
             onChange={setDepositAmount}
             balance={data.wrappedBalance}
             decimals={data.wrappedDecimals}
-            disabled={busy}
+            disabled={busy || manager.legacy}
           />
           <Button
             className="w-full"
-            disabled={!depositBn || busy || !data.active}
+            disabled={!depositBn || busy || !data.active || manager.legacy}
             onClick={async () => {
               if (!depositBn) return;
               await depositCollateral({
@@ -393,6 +468,7 @@ function CommandConsole({ collateral, refetch }: { collateral: AssetDefinition; 
                 ? `Room to mint at ${(data.minCollateralRatioBps / 100).toFixed(0)}% min ratio: ${formatEur(maxMintableEur)}`
                 : "Room to mint: pricing…",
               !data.active && "This collateral is frozen — new debt can't be minted against it.",
+              manager.legacy && "This instance is retired — borrow on the current instance instead.",
             ]}
           />
           <AmountField
@@ -401,7 +477,7 @@ function CommandConsole({ collateral, refetch }: { collateral: AssetDefinition; 
             value={mintAmount}
             onChange={setMintAmount}
             decimals={data.stableDecimals}
-            disabled={busy}
+            disabled={busy || manager.legacy}
           />
           {mintBn !== null && mintBn > 0n && (
             <p className="hud-readout text-xs text-muted-foreground">
@@ -421,7 +497,7 @@ function CommandConsole({ collateral, refetch }: { collateral: AssetDefinition; 
           )}
           <Button
             className="w-full"
-            disabled={!mintBn || busy || !data.active}
+            disabled={!mintBn || busy || !data.active || manager.legacy}
             onClick={async () => {
               if (!mintBn) return;
               await mintDebt({
@@ -527,13 +603,13 @@ function CommandConsole({ collateral, refetch }: { collateral: AssetDefinition; 
  * doesn't require going to a block explorer. Looks up an arbitrary address's position and, when
  * it's actually liquidatable, lets the connected wallet repay its debt and take its collateral.
  */
-function LiquidationConsole({ collateral }: { collateral: AssetDefinition }) {
+function LiquidationConsole({ collateral, manager }: { collateral: AssetDefinition; manager: CdpManagerRef }) {
   const { address: connected } = useAccount();
   const [target, setTarget] = useState("");
-  const { liquidate, step } = useCdpActions();
+  const { liquidate, step } = useCdpActions(manager);
 
   const targetAddress = isAddress(target) ? (target as Address) : undefined;
-  const { data, hasNoDebt, isLoading } = useCdpPosition(collateral.id, targetAddress);
+  const { data, hasNoDebt, isLoading } = useCdpPosition(collateral.id, targetAddress, manager);
   const { price: pricePerGram18, health: priceHealth } = useAssetPrice(collateral.id, collateral.pricedByOracle);
 
   const targetCollateralGrams = Number(data.collateralAmount) / 10 ** data.wrappedDecimals;

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { network } from "hardhat";
 
-// Registers REAL_ESTATE_PARIS_01_V6 as a third CDP collateral type, alongside GOLD and SILVER —
+// Registers REAL_ESTATE_PARIS_01_V7 as a third CDP collateral type, alongside GOLD and SILVER —
 // but unlike those two, it has no independent market price, only a static appraisal divided by
 // however many wrapped tokens are currently in circulation (see update-real-estate-price.ts's
 // header for the full reasoning). That derived price has to live in OracleManager like any other
@@ -24,7 +24,7 @@ import { network } from "hardhat";
 // After this, run update-real-estate-price.ts again after every deposit/redeem on this market —
 // registering it here does not make that maintenance step go away.
 
-const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V6";
+const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V7";
 // More conservative than GOLD's 150%/130% (register-silver-collateral.ts, deploy-cdp.ts): the
 // price behind this collateral can go stale or drift between operator updates in a way gold/
 // silver's live oracle feed can't, so more headroom is asked for up front. Placeholder demo
@@ -52,7 +52,7 @@ const priceSourceAddresses = [
 const cdpRecord = JSON.parse(readFileSync(`${deploymentDir}/cdp.json`, "utf8")) as { cdpManager: string };
 
 const [admin] = await ethers.getSigners();
-console.log("Registering REAL_ESTATE_PARIS_01_V6 collateral as", admin.address, "on", networkName);
+console.log("Registering REAL_ESTATE_PARIS_01_V7 collateral as", admin.address, "on", networkName);
 
 const vaultManager = await ethers.getContractAt("VaultManager", vaultManagerAddress);
 const accessManager = await ethers.getContractAt("AccessManager", accessManagerAddress);

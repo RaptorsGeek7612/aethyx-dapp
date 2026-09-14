@@ -1,8 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useReadContract } from "wagmi";
-import type { Address } from "viem";
+import { useReadContracts } from "wagmi";
+import type { Abi, Address } from "viem";
 import { Lock, Package, Euro, Wallet, Landmark } from "lucide-react";
 import { StatTile } from "@/components/reserve/stat-tile";
 import { CoverageMeter } from "@/components/reserve/coverage-meter";
@@ -11,8 +11,8 @@ import type { AssetDefinition } from "@/config/assets";
 import { useAssetStaticData } from "@/hooks/use-asset-static";
 import { useAssetPrice } from "@/hooks/use-asset-price";
 import { erc20Abi } from "@/lib/abis/erc20Abi";
-import { cdpManagerAbi } from "@/lib/abis/cdpManagerAbi";
-import { CDP_MANAGER_ADDRESS, isCdpConfigured } from "@/config/contracts";
+import { cdpManagerAbi, cdpManagerLegacyAbi } from "@/lib/abis/cdpManagerAbi";
+import { CDP_MANAGERS, isCdpConfigured } from "@/config/contracts";
 import { ZERO_ADDRESS } from "@/hooks/use-asset-static";
 import { formatAmount, formatCompactAmount } from "@/lib/format";
 import { toCanonical18 } from "@/lib/decimals";
@@ -28,27 +28,49 @@ export function ReserveCard({ asset, index }: { asset: AssetDefinition; index: n
 
   // Not gated on asset.pricedByOracle: whichever assets CDPManager actually recognizes as
   // collateral show up here on their own, the same "ask the contract, don't hardcode the list"
-  // approach the /cdp collateral selector uses.
-  const { data: cdpCollateral } = useReadContract({
-    address: CDP_MANAGER_ADDRESS as Address,
-    abi: cdpManagerAbi,
-    functionName: "collaterals",
-    args: [asset.id],
+  // approach the /cdp collateral selector uses. Reads every known CDPManager instance (current
+  // plus any retired ones — see CDP_MANAGERS in config/contracts.ts), not just the current one:
+  // a redeploy (AUDIT.md #12) doesn't move debt off the old instance, so summing only the new one
+  // would under-report backing the moment anything is still open on a superseded manager.
+  const { data: cdpCollaterals } = useReadContracts({
+    allowFailure: true,
+    contracts: CDP_MANAGERS.map(({ address, legacy }) => ({
+      address,
+      // Widened to plain Abi: legacy/current decode `collaterals` to differently-shaped tuples,
+      // and a precise union of both makes indexed fields resolve to unhelpful cross-shape unions
+      // (e.g. bigint | boolean) instead of narrowing per branch — see use-cdp.ts's useCdpPosition
+      // for the same trade-off.
+      abi: (legacy ? cdpManagerLegacyAbi : cdpManagerAbi) as Abi,
+      functionName: "collaterals" as const,
+      args: [asset.id] as const,
+    })),
     // totalDebt moves with every mint/repay on this collateral, by any wallet — same "this is
     // supposed to read as live" reasoning as useAssetStaticData's tokenData query.
     query: { enabled: isCdpConfigured, refetchInterval: 30_000 },
   });
-  const cdpWrappedToken = cdpCollateral?.[0] ?? ZERO_ADDRESS;
-  const cdpRegistered = cdpWrappedToken !== ZERO_ADDRESS;
-  const ioEurMinted = cdpCollateral?.[6] ?? 0n;
+  const perManagerCollateral = CDP_MANAGERS.map((manager, index) => {
+    const result = cdpCollaterals?.[index]?.result as readonly unknown[] | undefined;
+    const wrappedToken = (result?.[0] as Address | undefined) ?? ZERO_ADDRESS;
+    // Legacy's collaterals tuple has no liquidationBonusBps, so totalDebt sits one index earlier.
+    const totalDebt = (result?.[manager.legacy ? 5 : 6] as bigint | undefined) ?? 0n;
+    return { manager, wrappedToken, totalDebt, registered: wrappedToken !== ZERO_ADDRESS };
+  });
+  const cdpRegistered = perManagerCollateral.some((entry) => entry.registered);
+  const ioEurMinted = perManagerCollateral.reduce((sum, entry) => sum + entry.totalDebt, 0n);
 
-  const { data: cdpLockedBalance } = useReadContract({
-    address: cdpWrappedToken,
-    abi: erc20Abi,
-    functionName: "balanceOf",
-    args: [CDP_MANAGER_ADDRESS as Address],
+  const { data: cdpLockedBalances } = useReadContracts({
+    allowFailure: true,
+    contracts: perManagerCollateral
+      .filter((entry) => entry.registered)
+      .map((entry) => ({
+        address: entry.wrappedToken,
+        abi: erc20Abi,
+        functionName: "balanceOf" as const,
+        args: [entry.manager.address] as const,
+      })),
     query: { enabled: cdpRegistered, refetchInterval: 30_000 },
   });
+  const cdpLockedBalance = (cdpLockedBalances ?? []).reduce((sum, entry) => sum + (entry.result ?? 0n), 0n);
 
   const lockedNormalized = toCanonical18(data.lockedRaw, data.underlyingDecimals);
   const coverageBps = data.wrappedSupply > 0n ? (lockedNormalized * 10_000n) / data.wrappedSupply : null;

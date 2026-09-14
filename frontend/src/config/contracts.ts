@@ -27,6 +27,34 @@ export const CDP_MANAGER_ADDRESS = (process.env.NEXT_PUBLIC_CDP_MANAGER_ADDRESS 
 export const STABLE_TOKEN_ADDRESS = (process.env.NEXT_PUBLIC_STABLE_TOKEN_ADDRESS ?? "") as Address | "";
 export const isCdpConfigured = Boolean(CDP_MANAGER_ADDRESS && STABLE_TOKEN_ADDRESS);
 
+// CDPManager isn't upgradeable (see AUDIT.md #12, backend/scripts/redeploy-cdp-manager.ts): a
+// breaking ABI change means a fresh instance, and whatever was still open on the old one doesn't
+// migrate itself. Rather than the UI dropping a superseded instance the moment a new one goes
+// live — stranding anyone with an open position there — every retired CDPManager address stays
+// listed here so the console can still read and act on it, clearly marked as legacy.
+const rawLegacyManagers = process.env.NEXT_PUBLIC_CDP_MANAGER_LEGACY_ADDRESSES ?? "";
+export const CDP_MANAGER_LEGACY_ADDRESSES = rawLegacyManagers
+  .split(",")
+  .map((address) => address.trim())
+  .filter((address): address is Address => address.length > 0) as Address[];
+
+export interface CdpManagerRef {
+  address: Address;
+  label: string;
+  legacy: boolean;
+}
+
+// Current instance first — it's the one every selector defaults to and the only one new
+// collateral types get registered on.
+export const CDP_MANAGERS: CdpManagerRef[] = [
+  ...(CDP_MANAGER_ADDRESS ? [{ address: CDP_MANAGER_ADDRESS as Address, label: "Current", legacy: false }] : []),
+  ...CDP_MANAGER_LEGACY_ADDRESSES.map((address, index) => ({
+    address,
+    label: CDP_MANAGER_LEGACY_ADDRESSES.length > 1 ? `Legacy ${index + 1}` : "Legacy",
+    legacy: true,
+  })),
+];
+
 // The block this deployment's contracts were created at, if known — every getLogs scan (price
 // history, transaction history) starts here instead of the chain's genesis block. Without this,
 // a naive `fromBlock: 0n` on Sepolia means scanning several million blocks on every 30s refetch,
