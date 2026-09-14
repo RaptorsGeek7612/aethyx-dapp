@@ -679,12 +679,10 @@ body::after {
   text-shadow: 0 0 18px color-mix(in oklch, var(--hud-accent, var(--primary)), transparent 55%);
 }
 
-/* Curseur en fin de ligne de commande : une pulsation douce de lueur, pas un clignotement dur —
-   même geste que .live-dot (pulse-ring) plutôt qu'un opacity 0/1 en escalier, pour rester lisible
-   sans capter le regard. */
-.hud-cursor::after {
-  content: "▍";
-  margin-left: 2px;
+/* Ligne de commande vivante : pas de curseur séparé après le texte — le texte lui-même porte la
+   pulsation douce de lueur, même geste que .live-dot (pulse-ring) plutôt qu'un opacity 0/1 en
+   escalier, pour rester lisible sans capter le regard. */
+.hud-cursor {
   color: var(--hud-accent, var(--primary));
   animation: hud-glow 1.8s ease-in-out infinite;
 }
