@@ -187,7 +187,7 @@ function ConnectedConsole() {
         </div>
       ) : (
         <div className="space-y-4">
-          {availableManagers.length > 1 && (
+          {availableManagers.length >= 1 && (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground">Instance:</span>
               <div className="flex flex-wrap gap-2" role="tablist" aria-label="CDPManager instance">
