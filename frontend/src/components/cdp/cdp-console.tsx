@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { ASSETS, type AssetDefinition } from "@/config/assets";
+import { ASSETS, assetIdFromLabel, type AssetDefinition } from "@/config/assets";
 import { isCdpConfigured, CDP_MANAGERS, type CdpManagerRef } from "@/config/contracts";
 import { useCdpPosition } from "@/hooks/use-cdp";
 import { useCdpActions, type CdpStep } from "@/hooks/use-cdp-actions";
@@ -88,6 +88,18 @@ function statusKey(assetId: Hex, managerAddress: string) {
   return `${assetId}:${managerAddress}`;
 }
 
+// GOLD/SILVER keep the same assetId across every CDPManager instance — a redeploy only changes
+// which manager they're registered on. Real estate doesn't: each redeploy bumps the label itself
+// (V6 → V7, see AUDIT.md finding 1), so the *id* a legacy manager knows this collateral under is
+// asset.legacyLabel's id, not asset.id. Resolve per (asset, manager) rather than assuming asset.id
+// is universal — see AssetDefinition.legacyLabel's own comment for the full reasoning.
+function resolveCollateralId(asset: AssetDefinition, manager: CdpManagerRef): Hex {
+  return manager.legacy && asset.legacyLabel ? assetIdFromLabel(asset.legacyLabel) : asset.id;
+}
+function resolveCollateralLabel(asset: AssetDefinition, manager: CdpManagerRef): string {
+  return manager.legacy && asset.legacyLabel ? asset.legacyLabel : asset.label;
+}
+
 /** No UI of its own — reads one candidate's registration status on one CDPManager instance and
  *  reports it up, the same "probe reports, parent decides" shape as ReserveValueReporter/
  *  PortfolioAssetRow. Lets the selector below list every (asset, manager) pair without assuming
@@ -102,7 +114,7 @@ function CollateralProbe({
   manager: CdpManagerRef;
   onStatus: (key: string, status: CollateralStatus) => void;
 }) {
-  const { registered, isLoading } = useCdpPosition(asset.id, undefined, manager);
+  const { registered, isLoading } = useCdpPosition(resolveCollateralId(asset, manager), undefined, manager);
   const key = statusKey(asset.id, manager.address);
 
   useEffect(() => {
@@ -220,8 +232,10 @@ function ConnectedConsole() {
 }
 
 function PositionConsole({ collateral, manager }: { collateral: AssetDefinition; manager: CdpManagerRef }) {
-  const { data, hasNoDebt, refetch } = useCdpPosition(collateral.id, undefined, manager);
-  const { price: pricePerGram18, health: priceHealth } = useAssetPrice(collateral.id, collateral.pricedByOracle);
+  const collateralId = resolveCollateralId(collateral, manager);
+  const displayLabel = resolveCollateralLabel(collateral, manager);
+  const { data, hasNoDebt, refetch } = useCdpPosition(collateralId, undefined, manager);
+  const { price: pricePerGram18, health: priceHealth } = useAssetPrice(collateralId, collateral.pricedByOracle);
   const now = useNow(1000);
 
   const severity = cdpHealthSeverity(
@@ -259,7 +273,7 @@ function PositionConsole({ collateral, manager }: { collateral: AssetDefinition;
                 className="live-dot relative inline-flex h-1.5 w-1.5 rounded-full"
                 style={{ color: severity.color }}
               />
-              {collateral.label} / IOEUR
+              {displayLabel} / IOEUR
             </span>
             <span className="hud-tag" style={{ ["--hud-accent" as string]: severity.color }}>
               <severity.Icon className="h-3 w-3" aria-hidden />
@@ -373,9 +387,10 @@ function CommandConsole({
   manager: CdpManagerRef;
   refetch: () => void;
 }) {
-  const { data } = useCdpPosition(collateral.id, undefined, manager);
+  const collateralId = resolveCollateralId(collateral, manager);
+  const { data } = useCdpPosition(collateralId, undefined, manager);
   const { depositCollateral, withdrawCollateral, mintDebt, repayDebt, step } = useCdpActions(manager);
-  const { price: pricePerGram18, health: priceHealth } = useAssetPrice(collateral.id, collateral.pricedByOracle);
+  const { price: pricePerGram18, health: priceHealth } = useAssetPrice(collateralId, collateral.pricedByOracle);
 
   const [depositAmount, setDepositAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
@@ -445,7 +460,7 @@ function CommandConsole({
             onClick={async () => {
               if (!depositBn) return;
               await depositCollateral({
-                collateralId: collateral.id,
+                collateralId,
                 amount: depositBn,
                 wrappedToken: data.wrappedToken,
                 currentAllowance: data.wrappedAllowanceForCdp,
@@ -501,7 +516,7 @@ function CommandConsole({
             onClick={async () => {
               if (!mintBn) return;
               await mintDebt({
-                collateralId: collateral.id,
+                collateralId,
                 amount: mintBn,
                 onSuccess: () => {
                   setMintAmount("");
@@ -537,7 +552,7 @@ function CommandConsole({
             onClick={async () => {
               if (!repayBn) return;
               await repayDebt({
-                collateralId: collateral.id,
+                collateralId,
                 amount: repayBn,
                 currentAllowance: data.stableAllowanceForCdp,
                 onSuccess: () => {
@@ -580,7 +595,7 @@ function CommandConsole({
             onClick={async () => {
               if (!withdrawBn) return;
               await withdrawCollateral({
-                collateralId: collateral.id,
+                collateralId,
                 amount: withdrawBn,
                 onSuccess: () => {
                   setWithdrawAmount("");
@@ -608,9 +623,10 @@ function LiquidationConsole({ collateral, manager }: { collateral: AssetDefiniti
   const [target, setTarget] = useState("");
   const { liquidate, step } = useCdpActions(manager);
 
+  const collateralId = resolveCollateralId(collateral, manager);
   const targetAddress = isAddress(target) ? (target as Address) : undefined;
-  const { data, hasNoDebt, isLoading } = useCdpPosition(collateral.id, targetAddress, manager);
-  const { price: pricePerGram18, health: priceHealth } = useAssetPrice(collateral.id, collateral.pricedByOracle);
+  const { data, hasNoDebt, isLoading } = useCdpPosition(collateralId, targetAddress, manager);
+  const { price: pricePerGram18, health: priceHealth } = useAssetPrice(collateralId, collateral.pricedByOracle);
 
   const targetCollateralGrams = Number(data.collateralAmount) / 10 ** data.wrappedDecimals;
   const targetCollateralValueEur =
@@ -686,7 +702,7 @@ function LiquidationConsole({ collateral, manager }: { collateral: AssetDefiniti
         onClick={async () => {
           if (!targetAddress) return;
           await liquidate({
-            collateralId: collateral.id,
+            collateralId,
             user: targetAddress,
             debtToRepay: data.currentDebt,
             currentAllowance: data.stableAllowanceForCdp,

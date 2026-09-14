@@ -44,6 +44,18 @@ export interface AssetDefinition {
    * Per-share value = (holder's wrapped balance / wrapped total supply) * appraisalValueEur.
    */
   appraisalValueEur?: number;
+  /**
+   * Only meaningful for the CDP console (see cdp-console.tsx's resolveCollateralId). GOLD/SILVER
+   * keep the same label — and so the same assetId — across every CDPManager instance a redeploy
+   * creates (see AUDIT.md finding 12): the id this asset is registered under never changes, only
+   * which CDPManager it's registered on. Real estate is different — each redeploy bumps VERSION
+   * in deploy-real-estate-market.ts, so the *label itself* changes generation to generation
+   * (finding 1: V7 fixed the self-transfer escape V6 still carries). A legacy CDPManager can
+   * therefore hold a collateral registration for the *previous* label under this same building,
+   * not this one — set this to that previous label so the console can still reach it under the
+   * "Legacy" instance tab instead of it silently having nowhere to appear.
+   */
+  legacyLabel?: string;
 }
 
 // Every deposit opens its own tranche in a schedule shared by the whole market: redemption draws
@@ -100,6 +112,9 @@ export const ASSETS: AssetDefinition[] = [
     // five ways across the lock-up tiers precisely so summing them didn't multiply the building
     // by five.
     appraisalValueEur: 235_000,
+    // REAL_ESTATE_PARIS_01_V6 — still registered as CDP collateral on the legacy CDPManager
+    // (AUDIT.md finding 12's redeploy didn't migrate it). Lets the "Legacy" instance tab reach it.
+    legacyLabel: "REAL_ESTATE_PARIS_01_V6",
     // Not "priced by oracle" in the gold/silver sense (there's no independent market price — see
     // computeValuation's real-estate branch, which never reads OracleManager). Set to true only
     // once backend/scripts/register-real-estate-collateral.ts has actually registered a price
