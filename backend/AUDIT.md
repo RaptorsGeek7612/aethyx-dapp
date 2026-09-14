@@ -678,10 +678,17 @@ Indépendants de tout bug, et structurels :
   Sepolia, il est détenu par un EOA (`0x51F6eBAf…`), pas par un multisig ni un timelock.
 - `ASSET_MANAGER_ROLE` peut geler un actif, en changer les frais (voir le constat 2) et modifier
   les paramètres de l'oracle.
-- `ORACLE_UPDATER_ROLE` fixe les prix de `ManualPriceSource`. Sur Sepolia, les deux sources
-  enregistrées sous `GOLD` sont des sources manuelles : le prix affiché est celui que
-  l'administrateur veut bien pousser, et la médiane de deux sources tenues par la même main
-  n'apporte aucune protection réelle.
+- `ORACLE_UPDATER_ROLE` fixe les prix de `ManualPriceSource`. `SILVER` et le marché immobilier
+  restent entièrement sur des sources manuelles : le prix affiché est celui que l'administrateur
+  veut bien pousser, et la médiane de deux sources tenues par la même main n'apporte aucune
+  protection réelle. `GOLD` a été partiellement corrigé le 14 septembre 2026
+  (`scripts/wire-real-gold-price.ts`) : ses deux sources sont désormais
+  `ChainlinkGoldEurPerGramPriceSource`, qui lit le vrai flux Sepolia XAU/USD et ne laisse plus
+  qu'une conversion de devise (le taux EUR/USD, faute d'un flux Chainlink EUR/USD déployé sur
+  Sepolia — vérifié directement on-chain, pas seulement documenté) à la discrétion de
+  l'opérateur. Une manipulation reste possible via ce taux, mais son ampleur est bornée à ce
+  qu'un taux de change plausible peut faire varier — plus la latitude de fixer le prix de l'or
+  entier à volonté.
 
 ## Limites de cet audit
 

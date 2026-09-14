@@ -184,27 +184,38 @@ const source = await ethers.getContractAt("ManualPriceSource", "<adresse priceSo
 await source.setPrice(ethers.id("GOLD"), ethers.parseUnits("92", 18));
 ```
 
-### ChainlinkPriceSource sur Sepolia — une incohérence d'unités, pas un bug
+### ChainlinkPriceSource sur Sepolia — l'incohérence d'unités, résolue
 
 Le vrai flux Sepolia XAU/USD (`0xC5981F461d74c46eB4b0CF3f4Ec79f025573B0Ea`, confirmé actif
-on-chain) publie des dollars par once troy. Tout le reste du protocole — les entrées
-`ManualPriceSource` de l'actif `GOLD`, et tout le modèle de valorisation du frontend
-(`appraisalValueEur`, `priceEurPerGram`) — raisonne en euros par gramme. Ce sont deux unités
-différentes dans deux devises différentes, séparées par environ trois ordres de grandeur :
-enregistrer le flux brut sous `GOLD` ferait rejeter la source par le filtre de dispersion
-d'`OracleManager` — ou, pire, s'il venait à passer, étiquetterait partout dans l'interface un
-chiffre USD/once comme un prix EUR/gramme.
+on-chain) publie des dollars par once troy. Tout le reste du protocole — les entrées de prix de
+l'actif `GOLD`, et tout le modèle de valorisation du frontend (`appraisalValueEur`,
+`priceEurPerGram`) — raisonne en euros par gramme. Ce sont deux unités différentes dans deux
+devises différentes, séparées par environ trois ordres de grandeur : enregistrer le flux brut sous
+`GOLD` ferait rejeter la source par le filtre de dispersion d'`OracleManager` — ou, pire, s'il
+venait à passer, étiquetterait partout dans l'interface un chiffre USD/once comme un prix
+EUR/gramme.
 
-`ChainlinkPriceSource` est déployé et enregistré, mais sous son propre identifiant d'actif
-(`GOLD_USD_OZ`), délibérément séparé de l'identifiant `GOLD` que lit le frontend. Interroge-le
-directement — `ChainlinkPriceSource.latestPrice(anyBytes32)` ignore son argument — pour voir le
-vrai flux fonctionner ; `OracleManager.getPrice(GOLD_USD_OZ)` revert sur
-`InsufficientFreshSources`, puisque c'est la seule source enregistrée là et que `minSources` vaut 2
-par défaut. Ce revert est correct : il signifie qu'aucune seconde source, cohérente en unités, n'a
-été ajoutée pour cet identifiant — pas que quelque chose est cassé. Câbler proprement Chainlink
-dans `GOLD` lui-même suppose une conversion d'unités (petite conversion on-chain, ou une
-`ManualPriceSource` valorisée hors chaîne et tenue synchrone avec le flux en onces) ; c'est un
-travail futur, pas fait ici.
+`ChainlinkPriceSource` reste déployé et enregistré sous son propre identifiant d'actif
+(`GOLD_USD_OZ`) — interroge-le directement, `ChainlinkPriceSource.latestPrice(anyBytes32)` ignore
+son argument, pour voir le flux brut ; `OracleManager.getPrice(GOLD_USD_OZ)` revert toujours sur
+`InsufficientFreshSources` faute d'une seconde source cohérente en unités sous cet identifiant-là
+précisément.
+
+Sous `GOLD` lui-même, la conversion est désormais faite : `ChainlinkGoldEurPerGramPriceSource`
+(deux instances, même schéma que `RealEstateOnChainPriceSource` pour satisfaire le quorum de
+`minSources`) lit ce même flux XAU/USD et le convertit en EUR/gramme, en composant deux facteurs —
+31,1034768 grammes par once (constante physique, immuable) et un taux EUR/USD. Aucun flux
+Chainlink EUR/USD n'a été trouvé déployé sur Sepolia testnet (vérifié directement on-chain contre
+plusieurs adresses candidates trouvées par recherche web, toutes en réalité sur mainnet — seul le
+flux mainnet existe) ; le taux reste donc poussé manuellement, sous un identifiant `EUR_USD_RATE`
+dédié, distinct des identifiants d'actifs pour qu'une erreur d'opérateur ne puisse pas confondre un
+taux de change avec un prix de collatéral. Câblé par `scripts/wire-real-gold-price.ts`, qui
+retire aussi les deux anciennes `ManualPriceSource` de `GOLD` une fois la nouvelle valeur vérifiée
+dans une tolérance de 25 % par rapport au prix confirmé par l'opérateur — voir
+[`backend/AUDIT.md`](AUDIT.md), section « Risques de centralisation », pour ce que ça change
+concrètement (le prix de l'or suit désormais le marché réel ; seul le taux de change reste
+administré) et ce qui reste hors de sa portée (`SILVER` et le marché immobilier restent
+entièrement manuels).
 
 ## Notes de sécurité
 
