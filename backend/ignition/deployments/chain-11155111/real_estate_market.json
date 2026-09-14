@@ -31,5 +31,14 @@
     "factory": "0x1cd0c39Df0135895b39cDf4f617b387607689B9D",
     "lockupDays": 30,
     "maturityPerDeposit": true
+  },
+  "REAL_ESTATE_PARIS_01_V7": {
+    "assetId": "0xee2436aa071e57ea90331bd1eab5166045b21b4bb2e85e1237dee263da062ffb",
+    "adapter": "0x53E62D4A5a432A94e38b0D9d61E4Ca0cAF09586E",
+    "wrappedToken": "0x2Cf65cf7b62e3A510d6Ec0c267Fa357d1CD9193B",
+    "underlying": "0x49CEfD290FcdCDb951E68C68cbae7400551aebf9",
+    "factory": "0xa830F1B1ed23cDB1E74257F3fEcbBCb86338Da10",
+    "lockupDays": 30,
+    "maturityPerDeposit": false
   }
 }

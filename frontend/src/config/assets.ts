@@ -46,11 +46,12 @@ export interface AssetDefinition {
   appraisalValueEur?: number;
 }
 
-// Each real-estate deposit carries its own maturity, counted from its own date: the duration is
-// the same for all, but two deposits three days apart become redeemable three days apart. The UI
-// reads each tranche's unlock time off the adapter — see RealEstateAdapter.sol for the design and
-// for the self-transfer escape it knowingly accepts.
-const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V6";
+// Every deposit opens its own tranche in a schedule shared by the whole market: redemption draws
+// from the pool's total matured amount, not the caller's own deposits specifically — closing the
+// self-transfer escape earlier versions (V6 and before) knowingly accepted. See
+// RealEstateAdapter.sol and AUDIT.md finding 1's "l'arbitrage a été retranché en faveur de la
+// sécurité" update for the full history.
+const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V7";
 
 // VaultManager has no on-chain enumeration of registered assets (a deliberate simplicity
 // trade-off — see AssetAdapter.sol's lesson on the mapping-based registry). Until an indexer
@@ -117,14 +118,15 @@ export const ASSETS: AssetDefinition[] = [
 
 // Asset ids that predate a later redeploy or restructuring and are no longer in ASSETS above, but
 // still show up in wallet history (VaultManager keeps every Deposited/Redeemed event forever —
-// see useTransactionHistory). Three generations of real-estate market sit here:
+// see useTransactionHistory). Several generations of real-estate market sit here:
 // REAL_ESTATE_PARIS_01, the single untiered market from the first post-ROUTER_ROLE-fix redeploy;
 // the five per-lock-up tiers that briefly replaced it while the lock-up was a depositor-facing
-// choice; and _V3, superseded because the factory that produced it still emitted the original
-// adapter, whose lock-up a self-transfer walked straight past (see backend/AUDIT.md findings 1
-// and 7). Kept here purely so TransactionHistory can label those rows instead of showing
-// "Unknown asset" — not something a depositor can act on going forward, so they're deliberately
-// absent from ASSETS.
+// choice; _V3, superseded because the factory that produced it still emitted the original
+// adapter, whose lock-up a self-transfer walked straight past; and _V6, which — like _V3 — still
+// carries that same self-transfer escape (only fixed for real in _V7's market-wide pool; see
+// backend/AUDIT.md findings 1 and 7). Kept here purely so TransactionHistory can label those rows
+// instead of showing "Unknown asset" — not something a depositor can act on going forward, so
+// they're deliberately absent from ASSETS.
 const RETIRED_LOCKUP_TIERS = ["15D", "1M", "3M", "6M", "1Y"] as const;
 
 export const LEGACY_ASSET_LABELS: Record<Hex, string> = {
@@ -132,6 +134,7 @@ export const LEGACY_ASSET_LABELS: Record<Hex, string> = {
   [assetIdFromLabel("REAL_ESTATE_PARIS_01_V3")]: "Paris Property #01 (legacy, pre-market-wide lock-up)",
   [assetIdFromLabel("REAL_ESTATE_PARIS_01_V4")]: "Paris Property #01 (legacy, market-wide lock-up)",
   [assetIdFromLabel("REAL_ESTATE_PARIS_01_V5")]: "Paris Property #01 (legacy, no lock-up)",
+  [assetIdFromLabel("REAL_ESTATE_PARIS_01_V6")]: "Paris Property #01 (legacy, per-deposit maturity)",
   ...Object.fromEntries(
     RETIRED_LOCKUP_TIERS.map((key) => [
       assetIdFromLabel(`REAL_ESTATE_PARIS_01_${key}`),
