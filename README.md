@@ -97,23 +97,31 @@ wrappé AETHYX (GLD, SLD, RLD...) en collatéral et d'emprunter contre lui `ioEU
 dette émis par `StableToken`, jusqu'au ratio de collatéralisation minimal fixé par type de
 collatéral. La dette porte un frais de stabilité continu, en points de base par an. Une position
 dont la valeur du collatéral tombe sous le seuil de liquidation — par une chute de prix ou par
-l'accumulation de ce frais — peut être intégralement liquidée par n'importe qui : le liquidateur
-rembourse toute la dette et reçoit tout le collatéral en échange.
+l'accumulation de ce frais — peut être liquidée par n'importe qui, en partie ou en totalité : le
+liquidateur choisit combien de dette rembourser et reçoit le collatéral proportionnel, majoré d'un
+bonus par collatéral (voir `backend/AUDIT.md`, constat n°12).
 
 | Contrat | Rôle |
 |---|---|
 | `StableToken` (`ioEUR`) | Stablecoin de dette, `ERC20` + `ERC20Burnable`. Seul `CDPManager` (`DEBT_MINTER_ROLE`) peut en émettre. |
-| `CDPManager` | Verrouille le collatéral, émet et rembourse la dette, liquide les positions sous le seuil. Squelette de première version, volontairement simplifié : seule la liquidation totale est implémentée, ni partielle ni aux enchères. |
+| `CDPManager` | Verrouille le collatéral, émet et rembourse la dette, liquide les positions (partiellement ou totalement) sous le seuil. |
 
 Interface : page `/cdp` (`frontend/src/app/cdp/page.tsx`) — dépôt, retrait, emprunt, remboursement,
-et une console de liquidation ouverte à quiconque.
+et une console de liquidation ouverte à quiconque. Le frontend garde toute instance `CDPManager`
+retirée accessible (repay/withdraw/liquidate, pas de nouveaux dépôts/emprunts) plutôt que de la
+faire disparaître de l'UI au moment d'un redéploiement — voir
+`frontend/src/config/contracts.ts#CDP_MANAGERS` et `NEXT_PUBLIC_CDP_MANAGER_LEGACY_ADDRESSES`.
 
-Déployé sur Sepolia par `scripts/deploy-cdp.ts`, avec `GOLD` comme premier collatéral (150 % /
-130 %, frais de stabilité 2 %/an, fonds d'assurance à 50 % du frais — voir `backend/AUDIT.md`,
-constat n°8). Deux autres collatéraux ont été ajoutés depuis, chacun par son propre script :
-`SILVER` (`scripts/register-silver-collateral.ts`, mêmes paramètres que `GOLD`) et
-`REAL_ESTATE_PARIS_01_V6` (`scripts/register-real-estate-collateral.ts`, 200 % / 160 %, frais
-3 %/an — plus conservateur car ce marché n'a pas de prix de marché indépendant : son prix
+Déployé initialement sur Sepolia par `scripts/deploy-cdp.ts`, avec `GOLD` comme premier collatéral
+(150 % / 130 %, frais de stabilité 2 %/an, fonds d'assurance à 50 % du frais — voir
+`backend/AUDIT.md`, constat n°8). `SILVER` a suivi aux mêmes paramètres
+(`scripts/register-silver-collateral.ts`). Le `CDPManager` a été redéployé le 2026-09-13
+(`scripts/redeploy-cdp-manager.ts`) pour la liquidation partielle ci-dessus — les contrats ne sont
+pas mutables sur place, donc l'instance précédente reste utilisable pour ses positions déjà
+ouvertes (elle avait encore ~1,10 ioEUR de dette GOLD ouverte au moment du redéploiement) mais
+n'accepte plus de nouveaux types de collatéral. `GOLD` et `SILVER` ont été réenregistrés sur la
+nouvelle instance, puis `REAL_ESTATE_PARIS_01_V7` (200 % / 160 %, frais 3 %/an, bonus 10 % — plus
+conservateur car ce marché n'a pas de prix de marché indépendant : son prix
 (estimation ÷ offre en circulation) doit être repoussé manuellement via
 `scripts/update-real-estate-price.ts` après chaque dépôt/rachat sur ce marché, sous peine de
 devenir obsolète) :
@@ -121,18 +129,21 @@ devenir obsolète) :
 | Composant | Adresse |
 |---|---|
 | `StableToken` (`ioEUR`) | `0x5777897918ceDb97D7380cb034b265B32545E5cb` |
-| `CDPManager` | `0xA3C28Deb0E34086cA7b69AD26c19Dcf78BbA2F1d` |
+| `CDPManager` (courant, depuis 2026-09-13) | `0x5BB42b987e7F777699f48F4354c1642ed14D8c8C` |
+| `CDPManager` (retiré, encore accessible en lecture/gestion) | `0xA3C28Deb0E34086cA7b69AD26c19Dcf78BbA2F1d` |
 
 Voir [`backend/README.md`](backend/README.md#module-cdp) pour redéployer ou retrofitter ce module
 sur un autre réseau : `ignition/modules/CDP.ts` compose le protocole cœur sur un réseau neuf,
 `scripts/deploy-cdp.ts` retrofitte le module sur un déploiement existant.
 
-Deux constats de [`backend/AUDIT.md`](backend/AUDIT.md) portent spécifiquement sur ce module :
+Plusieurs constats de [`backend/AUDIT.md`](backend/AUDIT.md) portent spécifiquement sur ce module :
 constat n°8 (liquidation sans socialisation de la mauvaise dette — mitigé par un fonds
 d'assurance alimenté par une part configurable du frais de stabilité, mobilisé pour compléter un
-liquidateur en manque, dans la limite de son solde) et constat n°9 (absence de vérification de
-l'étalon du prix à l'enregistrement d'un collatéral — mitigé pour `GOLD` par `deploy-cdp.ts`, qui
-exige une confirmation opérateur avant d'écrire).
+liquidateur en manque, dans la limite de son solde), constat n°9 (absence de vérification de
+l'étalon du prix à l'enregistrement d'un collatéral — mitigé par une confirmation opérateur avant
+chaque enregistrement), constat n°10 (le premier `CDPManager` ne se déployait pas contre
+l'`AccessManager` déjà en place sur Sepolia — corrigé), et constat n°12 (liquidation partielle,
+ci-dessus — résolu et déployé).
 
 ## Backend — Hardhat 3
 
@@ -194,17 +205,22 @@ déployé, il ne peut pas être renommé sans redéploiement complet. Le code so
 `AethyxGateway` ; voir `backend/contracts/AethyxGateway.sol`.
 
 Marché immobilier courant, déployé par `scripts/deploy-real-estate-market.ts` sous l'identifiant
-`REAL_ESTATE_PARIS_01_V6` (30 jours, échéance par dépôt) — voir
-`ignition/deployments/chain-11155111/real_estate_market.json` :
+`REAL_ESTATE_PARIS_01_V7` (30 jours, échéancier commun au marché — voir
+[`backend/AUDIT.md`](backend/AUDIT.md), constat n°1) le 2026-09-14 — voir
+`ignition/deployments/chain-11155111/real_estate_market.json`. Tous vérifiés sur Sourcify :
 
 | Composant | Adresse |
 |---|---|
-| `RealEstateAdapter` | `0x2f118f119a642D346Ff63051E6D1EEaA03d5A3eD` |
-| Token wrappé (`RLD`) | `0x7f3dF4E74E780030799e12a341D0F927275306B5` |
+| `RealEstateAdapter` | `0x53E62D4A5a432A94e38b0D9d61E4Ca0cAF09586E` |
+| Token wrappé (`RLD`) | `0x2Cf65cf7b62e3A510d6Ec0c267Fa357d1CD9193B` |
 | Sous-jacent ERC-3643 | `0x49CEfD290FcdCDb951E68C68cbae7400551aebf9` |
-| `RealEstateAssetFactory` (redéployée) | voir `real_estate_market.json` |
+| `RealEstateAssetFactory` (redéployée) | `0xa830F1B1ed23cDB1E74257F3fEcbBCb86338Da10` |
 
-La fabrique de la table précédente (`0x0d759a29…92cE`) émettait encore l'adaptateur d'origine :
+`REAL_ESTATE_PARIS_01_V6` et les versions antérieures restent enregistrées et actives sur
+`VaultManager` — le frontend ne les référence plus, mais quiconque détient déjà leur token
+wrappé peut encore les utiliser (avec l'auto-transfert d'origine intact sur ces versions-là
+spécifiquement, voir constat n°1). La fabrique qui a produit `V6`
+(`0x1cd0c39Df0135895b39cDf4f617b387607689B9D`) émettait encore l'adaptateur à échéance par dépôt :
 une fabrique fige le bytecode de son adaptateur au moment où elle est compilée. Voir
 [`backend/AUDIT.md`](backend/AUDIT.md), constat n°7.
 

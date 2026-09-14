@@ -1,18 +1,21 @@
 # Audit de sécurité — AETHYX Gateway
 
-**Date** : 11 septembre 2026, étendu le 12 septembre 2026 au module CDP puis à une passe de
-vérification Sourcify sur l'ensemble des contrats déployés (constats 10 et 11)
+**Date** : 11 septembre 2026, étendu le 12 septembre 2026 au module CDP, à une passe de
+vérification Sourcify sur l'ensemble des contrats déployés (constats 10 et 11), puis le
+13-14 septembre 2026 à la liquidation partielle et au marché immobilier à échéancier commun
+(constat n°12, redéploiement du constat n°1)
 **Périmètre** : les 23 fichiers de `backend/contracts/` à `c6c1f48` pour les constats 1 à 7 ; les
 26 fichiers à `078176a` pour les constats 8 et 9, qui ajoutent `CDPManager.sol` et `StableToken.sol`
 **Nature** : revue interne par lecture de code, non une attestation par un tiers indépendant
-**Déploiement examiné** : Sepolia, `VaultManager` `0x63C5bACc…6b53` ; module CDP déployé le
-12 septembre 2026, `CDPManager` `0xA3C28Deb…2F1d` — voir `backend/README.md#module-cdp`
+**Déploiement examiné** : Sepolia, `VaultManager` `0x63C5bACc…6b53` ; module CDP redéployé le
+13 septembre 2026, `CDPManager` `0x5BB42b98…D8c8C` (précédent : `0xA3C28Deb…2F1d`, toujours
+accessible pour ses positions déjà ouvertes) — voir `backend/README.md#module-cdp`
 
 ## Synthèse
 
 | # | Constat | Sévérité | Statut |
 |---|---|---|---|
-| 1 | L'échéance immobilière se contourne par auto-transfert | **Élevée** | **Risque accepté** — arbitrage produit assumé |
+| 1 | L'échéance immobilière se contourne par auto-transfert | **Élevée** | **Corrigé et déployé** (2026-09-14) — échéancier commun au marché, `REAL_ESTATE_PARIS_01_V7` |
 | 2 | Frais réglables jusqu'à 100 % | **Moyenne** | Latent (frais à 0) |
 | 3 | Rachat de poussière : destruction sans contrepartie | **Faible** | Latent (sous-jacents en 18 décimales) |
 | 4 | `getPrice` revert sur horodatage futur, hors `try/catch` | **Faible** | Latent |
@@ -22,14 +25,15 @@ vérification Sourcify sur l'ensemble des contrats déployés (constats 10 et 11
 | 8 | Liquidation du CDP sans socialisation de la mauvaise dette | **Moyenne à élevée selon paramètres** | **Mitigé** — fonds d'assurance alimenté par une part du frais de stabilité (`setInsuranceFundFeeBps`), mobilisé à la liquidation |
 | 9 | `addCollateralType` ne vérifie pas l'étalon du prix enregistré | **Faible à élevée selon l'erreur** | **Mitigé** — `deploy-cdp.ts` exige et vérifie une confirmation |
 | 10 | `CDPManager`/`StableToken` undeployable contre un `AccessManager` préexistant | **Élevée** | **Corrigé** — rôles calculés localement plutôt que lus sur l'instance fournie |
-| 11 | `RealEstateAssetFactory` V6 ne se vérifie pas sur Sourcify | **Non exploitable** | **Non résolu** — ce qu'elle a déployé se vérifie, elle-même non ; cause exacte non isolée |
+| 11 | `RealEstateAssetFactory` V6 ne se vérifie pas sur Sourcify | **Non exploitable** | **Résolu** (2026-09-13) — soumission directe à l'API Sourcify, `exact_match` |
+| 12 | `CDPManager` ne liquidait qu'en totalité | **Amélioration** | **Résolu et déployé** (2026-09-13) — liquidation partielle, nouveau `CDPManager` |
 
 Aucun constat critique. Le constat 1 invalidait une propriété que le protocole annonce ; il est
 corrigé et déployé. Le constat 7, découvert en tentant ce déploiement, expliquait pourquoi deux
 générations de correctifs n'avaient jamais atteint la chaîne. Les constats 8 et 9 portent sur le
-module CDP, pas encore déployé : latents par construction, pas encore par chance. Le constat 10,
-découvert en tentant *ce* déploiement, est le pendant du constat 7 pour les rôles plutôt que pour
-le bytecode d'une fabrique.
+module CDP, déployé depuis, et mitigés plutôt qu'exploités : latents par construction jusque-là,
+pas encore par chance. Le constat 10, découvert en tentant *ce* déploiement, est le pendant du
+constat 7 pour les rôles plutôt que pour le bytecode d'une fabrique.
 
 Mise à jour du 12 septembre 2026 (soir) : le constat 8 est passé de « décision produit en
 attente » à « mitigé » — un fonds d'assurance, alimenté par une part configurable du frais de
@@ -37,8 +41,9 @@ stabilité, comble désormais tout ou partie du manque d'une liquidation en bad 
 section dédiée ci-dessous pour ce que ça couvre et ce qui reste hors de sa portée. Le constat 10
 a été découvert et corrigé dans la foulée, en tentant effectivement ce déploiement.
 
-Marché en vigueur : `REAL_ESTATE_PARIS_01_V4`, adaptateur `0x7aE821eb…3700` (6 051 octets, calendrier
-global vérifié par balayage des sélecteurs), fabrique `0xABB4C7D0…71aD`.
+Marché en vigueur : `REAL_ESTATE_PARIS_01_V7`, adaptateur `0x53E62D4A…586E` (échéancier commun au
+marché, constat n°1), fabrique `0xa830F1B1…Da10`, enregistré comme collatéral CDP sur le nouveau
+`CDPManager` (constat n°12).
 
 Durcissement appliqué par `scripts/harden-legacy-real-estate.ts` : le `FACTORY_ROLE` de la fabrique
 remplacée `0x0d759a29…92cE` est révoqué, et cinq des sept marchés supersédés sont gelés. Deux
@@ -68,14 +73,19 @@ suppose d'obtenir d'abord le rachat de ces porteurs, puis de relancer le script.
 > `nextUnlockAt()`/`lockSchedule()`, sans argument — signatures différentes plutôt qu'un
 > comportement qui change en silence sous la même ABI.
 >
-> Déployé comme `REAL_ESTATE_PARIS_01_V7` (voir `scripts/deploy-real-estate-market.ts`) ; `V6` et
-> les versions antérieures restent enregistrées et actives sur `VaultManager` — le frontend ne les
-> référence plus, mais quiconque détient déjà leur token wrappé peut encore les utiliser, avec le
-> contournement d'origine intact sur ces versions-là spécifiquement.
+> Déployé comme `REAL_ESTATE_PARIS_01_V7` le 2026-09-14 (adaptateur
+> `0x53E62D4A5a432A94e38b0D9d61E4Ca0cAF09586E`, token wrappé `0x2Cf65cf7b62e3A510d6Ec0c267Fa357d1CD9193B`,
+> voir `scripts/deploy-real-estate-market.ts`), tous deux vérifiés `exact_match` sur Sourcify ;
+> `V6` et les versions antérieures restent enregistrées et actives sur `VaultManager` — le frontend
+> ne les référence plus, mais quiconque détient déjà leur token wrappé peut encore les utiliser,
+> avec le contournement d'origine intact sur ces versions-là spécifiquement.
 >
-> `CDPManager` a aussi changé (voir constat n°12 : liquidation partielle) et doit être redéployé ;
-> si `V6` était enregistré comme collatéral CDP, migrer vers `V7` sur le nouveau `CDPManager`
-> plutôt que sur l'ancien.
+> `CDPManager` a aussi changé (voir constat n°12 : liquidation partielle) et a été redéployé le
+> même jour : `V7` est enregistré comme collatéral sur le nouveau `CDPManager`
+> (`0x5BB42b987e7F777699f48F4354c1642ed14D8c8C`). `V6` était enregistré comme collatéral sur
+> l'ancien `CDPManager` (`0xA3C28Deb0E34086cA7b69AD26c19Dcf78BbA2F1d`, dette nulle à ce jour) ;
+> il n'a pas été migré ni désactivé là-bas — la même position que pour GOLD/SILVER (constat n°12) :
+> l'ancien contrat n'accepte plus de nouveau collatéral mais gère toujours ce qui y est déjà.
 >
 > Le test qui documentait le contournement comme accepté (`test/RealEstateAdapter.ts`, « documents
 > the accepted escape ») a été remplacé par des tests qui vérifient l'inverse : l'auto-transfert
@@ -562,13 +572,20 @@ comportement attendu des protocoles de prêt comparables (Aave, Compound), pas u
 **Statut.** Résolu, testé (`test_PartialLiquidationSeizesProportionalCollateralPlusBonus`,
 `test_LiquidationBonusCappedAtRemainingCollateral`, `test_LiquidateRevertsOnZeroDebtToRepay`,
 `test_LiquidateRevertsWhenDebtToRepayExceedsDebt`,
-`test_AddCollateralTypeRevertsWhenLiquidationBonusTooHigh`), mais **pas encore déployé** : la
-signature de `liquidate` et la forme de `CollateralConfig` ont changé, ce qui casse l'ABI du
-`CDPManager` déjà en place sur Sepolia (`0xA3C28Deb0E34086cA7b69AD26c19Dcf78BbA2F1d`) — ces
-contrats ne sont pas mis à niveau sur place. Un nouveau `CDPManager` doit être déployé et les
-collatéraux (GOLD, SILVER, `REAL_ESTATE_PARIS_01_V7`) réenregistrés dessus ; la position ouverte
-sur l'ancien contrat reste utilisable (remboursement, retrait, liquidation) mais n'en migre pas
-automatiquement.
+`test_AddCollateralTypeRevertsWhenLiquidationBonusTooHigh`), et **déployé** (2026-09-13, via
+`scripts/redeploy-cdp-manager.ts`) : la signature de `liquidate` et la forme de
+`CollateralConfig` ayant changé — ce qui casse l'ABI du `CDPManager` déjà en place sur Sepolia —
+et ces contrats n'étant pas mis à niveau sur place, un nouveau `CDPManager` a été déployé à
+`0x5BB42b987e7F777699f48F4354c1642ed14D8c8C`, vérifié `exact_match` sur
+[Sourcify](https://sourcify.dev/server/repo-ui/11155111/0x5BB42b987e7F777699f48F4354c1642ed14D8c8C).
+`GOLD` et `SILVER` y ont été réenregistrés (mêmes paramètres qu'avant), puis
+`REAL_ESTATE_PARIS_01_V7` (`scripts/register-real-estate-collateral.ts`, 200 % / 160 % / 3 %/an /
+10 % de bonus — voir sa propre entrée ci-dessous et constat n°1). L'ancien `CDPManager`
+(`0xA3C28Deb0E34086cA7b69AD26c19Dcf78BbA2F1d`) avait encore une position GOLD ouverte
+(~1,10 ioEUR de dette) au moment du redéploiement ; elle n'en migre pas automatiquement, reste
+utilisable sur l'ancien contrat (remboursement, retrait, liquidation), et le frontend garde cette
+instance accessible plutôt que de la faire disparaître de l'UI — voir
+`frontend/src/config/contracts.ts#CDP_MANAGERS`.
 
 ---
 
