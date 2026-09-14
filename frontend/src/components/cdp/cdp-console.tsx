@@ -21,7 +21,12 @@ import { cn } from "@/lib/utils";
 const NO_DEBT_RATIO = 2n ** 256n - 1n;
 
 const formatEur = (n: number) =>
-  n.toLocaleString(undefined, { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  n.toLocaleString(undefined, {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 // Every oracle-priced asset is a *candidate* collateral — deploy-cdp.ts only registers GOLD today
 // (see backend/scripts/deploy-cdp.ts), but the console shouldn't hardcode that: CollateralProbe
@@ -139,7 +144,8 @@ function ConnectedConsole() {
   const selected = CDP_COLLATERAL_CANDIDATES.find((asset) => asset.id === selectedId) ?? CDP_COLLATERAL_CANDIDATES[0];
 
   const isAvailable = (assetId: Hex) => CDP_MANAGERS.some((m) => statuses[statusKey(assetId, m.address)]?.registered);
-  const isAssetLoading = (assetId: Hex) => CDP_MANAGERS.some((m) => statuses[statusKey(assetId, m.address)]?.isLoading !== false);
+  const isAssetLoading = (assetId: Hex) =>
+    CDP_MANAGERS.some((m) => statuses[statusKey(assetId, m.address)]?.isLoading !== false);
 
   const anyLoading = CDP_COLLATERAL_CANDIDATES.some((asset) => isAssetLoading(asset.id));
   const anyRegistered = CDP_COLLATERAL_CANDIDATES.some((asset) => isAvailable(asset.id));
@@ -148,14 +154,18 @@ function ConnectedConsole() {
   // asset is registered there too — legacy only wins when that's the sole place it still lives.
   const availableManagers = CDP_MANAGERS.filter((m) => statuses[statusKey(selected.id, m.address)]?.registered);
   const [selectedManagerAddress, setSelectedManagerAddress] = useState<string | null>(null);
-  const selectedManager =
-    availableManagers.find((m) => m.address === selectedManagerAddress) ?? availableManagers[0];
+  const selectedManager = availableManagers.find((m) => m.address === selectedManagerAddress) ?? availableManagers[0];
 
   return (
     <div className="space-y-6">
       {CDP_COLLATERAL_CANDIDATES.flatMap((asset) =>
         CDP_MANAGERS.map((manager) => (
-          <CollateralProbe key={statusKey(asset.id, manager.address)} asset={asset} manager={manager} onStatus={handleStatus} />
+          <CollateralProbe
+            key={statusKey(asset.id, manager.address)}
+            asset={asset}
+            manager={manager}
+            onStatus={handleStatus}
+          />
         )),
       )}
 
@@ -256,8 +266,7 @@ function PositionConsole({ collateral, manager }: { collateral: AssetDefinition;
   // RWA value: grams of physical collateral locked, priced at the live oracle feed (EUR/gram).
   // ioEUR is the money side, already 1:1 with EUR, so its own amount doubles as its currency value.
   const collateralGrams = Number(data.collateralAmount) / 10 ** data.wrappedDecimals;
-  const collateralValueEur =
-    priceHealth === "healthy" ? collateralGrams * (Number(pricePerGram18) / 1e18) : null;
+  const collateralValueEur = priceHealth === "healthy" ? collateralGrams * (Number(pricePerGram18) / 1e18) : null;
   const debtValueEur = Number(data.currentDebt) / 10 ** data.stableDecimals;
 
   return (
@@ -341,8 +350,8 @@ function PositionConsole({ collateral, manager }: { collateral: AssetDefinition;
         >
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-status-warning" />
           <p className="text-muted-foreground">
-            This is a retired CDPManager instance ({manager.address}) — new deposits and borrows go through the
-            current instance instead. Existing collateral here can still be repaid, withdrawn, or liquidated.
+            This is a retired CDPManager instance ({manager.address}) — new deposits and borrows go through the current
+            instance instead. Existing collateral here can still be repaid, withdrawn, or liquidated.
           </p>
         </div>
       )}
@@ -413,8 +422,7 @@ function CommandConsole({
   const debtValueEur = Number(data.currentDebt) / 10 ** data.stableDecimals;
   const minRatio = data.minCollateralRatioBps / 10_000;
 
-  const maxMintableEur =
-    collateralValueEur !== null ? Math.max(collateralValueEur / minRatio - debtValueEur, 0) : null;
+  const maxMintableEur = collateralValueEur !== null ? Math.max(collateralValueEur / minRatio - debtValueEur, 0) : null;
   const maxWithdrawableTokens =
     collateralValueEur !== null && priceEurPerGram > 0
       ? Math.min(Math.max(collateralValueEur - debtValueEur * minRatio, 0) / priceEurPerGram, collateralGrams)
@@ -503,7 +511,9 @@ function CommandConsole({
                   })
                 : "…"}{" "}
               {data.wrappedSymbol} of collateral value · ratio{" "}
-              {debtValueEur > 0 && collateralValueEur !== null ? `${((collateralValueEur / debtValueEur) * 100).toFixed(0)}%` : "∞"}
+              {debtValueEur > 0 && collateralValueEur !== null
+                ? `${((collateralValueEur / debtValueEur) * 100).toFixed(0)}%`
+                : "∞"}
               {" → "}
               {collateralValueEur !== null
                 ? `${((collateralValueEur / (debtValueEur + Number(mintBn) / 10 ** data.stableDecimals)) * 100).toFixed(0)}%`
@@ -652,8 +662,8 @@ function LiquidationConsole({ collateral, manager }: { collateral: AssetDefiniti
         <h2 className="hud-readout text-sm font-semibold uppercase tracking-[0.08em]">Liquidation console</h2>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        Anyone can close out a position below {(data.liquidationThresholdBps / 100).toFixed(0)}% collateralization.
-        Look one up by address.
+        Anyone can close out a position below {(data.liquidationThresholdBps / 100).toFixed(0)}% collateralization. Look
+        one up by address.
       </p>
 
       <div className="mt-4 space-y-1.5">

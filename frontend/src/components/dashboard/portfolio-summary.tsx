@@ -63,7 +63,12 @@ export function PortfolioSummary() {
   const oracleHealth = aggregateOracleHealth(entries.map((m) => m.oracleHealth));
 
   const formatEur = (n: number) =>
-    n.toLocaleString(undefined, { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    n.toLocaleString(undefined, {
+      style: "currency",
+      currency: "EUR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
 
   return (
     <motion.div variants={staggerContainer(0.08)} initial="hidden" animate="visible" className="space-y-5">

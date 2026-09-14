@@ -13,13 +13,18 @@ const COLLATERAL_DEPOSITED = parseAbiItem(
 const COLLATERAL_WITHDRAWN = parseAbiItem(
   "event CollateralWithdrawn(address indexed user, bytes32 indexed collateralId, uint256 amount)",
 );
-const DEBT_MINTED = parseAbiItem("event DebtMinted(address indexed user, bytes32 indexed collateralId, uint256 amount)");
-const DEBT_REPAID = parseAbiItem("event DebtRepaid(address indexed user, bytes32 indexed collateralId, uint256 amount)");
+const DEBT_MINTED = parseAbiItem(
+  "event DebtMinted(address indexed user, bytes32 indexed collateralId, uint256 amount)",
+);
+const DEBT_REPAID = parseAbiItem(
+  "event DebtRepaid(address indexed user, bytes32 indexed collateralId, uint256 amount)",
+);
 const POSITION_LIQUIDATED = parseAbiItem(
   "event PositionLiquidated(address indexed user, bytes32 indexed collateralId, address indexed liquidator, uint256 debtRepaid, uint256 collateralSeized)",
 );
 
-export type CdpActivityType = "collateral-deposit" | "collateral-withdraw" | "mint" | "repay" | "liquidated" | "liquidator";
+export type CdpActivityType =
+  "collateral-deposit" | "collateral-withdraw" | "mint" | "repay" | "liquidated" | "liquidator";
 
 export interface CdpActivityEntry {
   type: CdpActivityType;
@@ -55,12 +60,32 @@ export function useCdpActivity() {
       const perManager = await Promise.all(
         CDP_MANAGERS.map(async ({ address }) => {
           const [deposits, withdrawals, mints, repayments, liquidatedOwner, liquidatedBy] = await Promise.all([
-            getLogsChunked(publicClient, { address, event: COLLATERAL_DEPOSITED, args: { user: account } }, fromBlock, toBlock),
-            getLogsChunked(publicClient, { address, event: COLLATERAL_WITHDRAWN, args: { user: account } }, fromBlock, toBlock),
+            getLogsChunked(
+              publicClient,
+              { address, event: COLLATERAL_DEPOSITED, args: { user: account } },
+              fromBlock,
+              toBlock,
+            ),
+            getLogsChunked(
+              publicClient,
+              { address, event: COLLATERAL_WITHDRAWN, args: { user: account } },
+              fromBlock,
+              toBlock,
+            ),
             getLogsChunked(publicClient, { address, event: DEBT_MINTED, args: { user: account } }, fromBlock, toBlock),
             getLogsChunked(publicClient, { address, event: DEBT_REPAID, args: { user: account } }, fromBlock, toBlock),
-            getLogsChunked(publicClient, { address, event: POSITION_LIQUIDATED, args: { user: account } }, fromBlock, toBlock),
-            getLogsChunked(publicClient, { address, event: POSITION_LIQUIDATED, args: { liquidator: account } }, fromBlock, toBlock),
+            getLogsChunked(
+              publicClient,
+              { address, event: POSITION_LIQUIDATED, args: { user: account } },
+              fromBlock,
+              toBlock,
+            ),
+            getLogsChunked(
+              publicClient,
+              { address, event: POSITION_LIQUIDATED, args: { liquidator: account } },
+              fromBlock,
+              toBlock,
+            ),
           ]);
 
           const entries: CdpActivityEntry[] = [

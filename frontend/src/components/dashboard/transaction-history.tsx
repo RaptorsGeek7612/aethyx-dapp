@@ -26,7 +26,12 @@ function formatEntryAmount(amount: bigint) {
 
 type LedgerRow =
   | { origin: "gateway"; blockNumber: bigint; transactionHash: HistoryEntry["transactionHash"]; entry: HistoryEntry }
-  | { origin: "cdp"; blockNumber: bigint; transactionHash: CdpActivityEntry["transactionHash"]; entry: CdpActivityEntry };
+  | {
+      origin: "cdp";
+      blockNumber: bigint;
+      transactionHash: CdpActivityEntry["transactionHash"];
+      entry: CdpActivityEntry;
+    };
 
 const CDP_ROW_META: Record<CdpActivityEntry["type"], { label: string; direction: "in" | "out" | "alert" }> = {
   "collateral-deposit": { label: "Lock collateral", direction: "in" },

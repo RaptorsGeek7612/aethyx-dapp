@@ -277,7 +277,12 @@ function MyHoldingSummary({
         </p>
       )}
       <p className="num-display mt-1 text-lg font-medium text-primary">
-        {valueEur.toLocaleString(undefined, { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        {valueEur.toLocaleString(undefined, {
+          style: "currency",
+          currency: "EUR",
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}
       </p>
       {asset.pricedByOracle && asset.kind !== "real-estate" && (
         <p className="mt-1 text-xs text-muted-foreground">
