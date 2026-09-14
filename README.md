@@ -198,6 +198,7 @@ inclure le verrouillage de `ROUTER_ROLE` et le durcissement d'`OracleManager` �
 | `priceSourcePrimary` (ManualPriceSource) | `0x7656d3AdC0c464a8945417697Ceb78640B8a8933` |
 | `priceSourceSecondary` (ManualPriceSource) | `0x21D2e5dc6D2400c460039F8597c148429d12cd2f` |
 | `ChainlinkPriceSource` (vrai flux Sepolia XAU/USD) | `0x8e6ded34eeE24F6270F696eeDFfbD479Dd0bdb4A` |
+| `ChainlinkGoldEurPerGramPriceSource` ×2 (sources actives de `GOLD` depuis le 14/09/2026) | `0x210Fa1Da88E3a3aD16910E1a07d1330327eA86e8`, `0x89aF3c2623473e1d8b900d0F8F029E1832A669a9` |
 
 ¹ Ce déploiement précède le renommage en AETHYX : sur Sourcify et Etherscan, ce contrat reste
 vérifié sous son nom de code source d'origine, antérieur au renommage — immuable une fois

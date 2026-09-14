@@ -682,13 +682,17 @@ Indépendants de tout bug, et structurels :
   restent entièrement sur des sources manuelles : le prix affiché est celui que l'administrateur
   veut bien pousser, et la médiane de deux sources tenues par la même main n'apporte aucune
   protection réelle. `GOLD` a été partiellement corrigé le 14 septembre 2026
-  (`scripts/wire-real-gold-price.ts`) : ses deux sources sont désormais
-  `ChainlinkGoldEurPerGramPriceSource`, qui lit le vrai flux Sepolia XAU/USD et ne laisse plus
-  qu'une conversion de devise (le taux EUR/USD, faute d'un flux Chainlink EUR/USD déployé sur
-  Sepolia — vérifié directement on-chain, pas seulement documenté) à la discrétion de
-  l'opérateur. Une manipulation reste possible via ce taux, mais son ampleur est bornée à ce
-  qu'un taux de change plausible peut faire varier — plus la latitude de fixer le prix de l'or
-  entier à volonté.
+  (`scripts/wire-real-gold-price.ts`, exécuté) : ses deux sources sont désormais deux instances de
+  `ChainlinkGoldEurPerGramPriceSource` (`0x210Fa1Da88E3a3aD16910E1a07d1330327eA86e8` et
+  `0x89aF3c2623473e1d8b900d0F8F029E1832A669a9`), qui lisent le vrai flux Sepolia XAU/USD
+  (`0x8e6ded34eeE24F6270F696eeDFfbD479Dd0bdb4A`) et ne laissent plus qu'une conversion de devise
+  (le taux EUR/USD, faute d'un flux Chainlink EUR/USD déployé sur Sepolia — vérifié directement
+  on-chain contre plusieurs adresses candidates, pas seulement documenté) à la discrétion de
+  l'opérateur. `OracleManager.getPrice(GOLD)` est passé de ~92 €/g (valeur manuelle statique) à
+  ~127,64 €/g (marché réel au 14 septembre 2026) dès l'exécution du script, confirmé
+  indépendamment on-chain et sur le site en production. Une manipulation reste possible via le
+  taux de change, mais son ampleur est bornée à ce qu'un taux de change plausible peut faire
+  varier — plus la latitude de fixer le prix de l'or entier à volonté.
 
 ## Limites de cet audit
 

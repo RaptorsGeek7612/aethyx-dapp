@@ -209,12 +209,14 @@ Chainlink EUR/USD n'a été trouvé déployé sur Sepolia testnet (vérifié dir
 plusieurs adresses candidates trouvées par recherche web, toutes en réalité sur mainnet — seul le
 flux mainnet existe) ; le taux reste donc poussé manuellement, sous un identifiant `EUR_USD_RATE`
 dédié, distinct des identifiants d'actifs pour qu'une erreur d'opérateur ne puisse pas confondre un
-taux de change avec un prix de collatéral. Câblé par `scripts/wire-real-gold-price.ts`, qui
-retire aussi les deux anciennes `ManualPriceSource` de `GOLD` une fois la nouvelle valeur vérifiée
-dans une tolérance de 25 % par rapport au prix confirmé par l'opérateur — voir
-[`backend/AUDIT.md`](AUDIT.md), section « Risques de centralisation », pour ce que ça change
-concrètement (le prix de l'or suit désormais le marché réel ; seul le taux de change reste
-administré) et ce qui reste hors de sa portée (`SILVER` et le marché immobilier restent
+taux de change avec un prix de collatéral. Câblé le 14 septembre 2026 par
+`scripts/wire-real-gold-price.ts`, qui a aussi retiré les deux anciennes `ManualPriceSource` de
+`GOLD` une fois la nouvelle valeur vérifiée dans une tolérance de 25 % par rapport au prix
+confirmé par l'opérateur — `OracleManager.getPrice(GOLD)` est passé de ~92 €/g (valeur manuelle
+statique) à ~127,64 €/g (marché réel), confirmé indépendamment on-chain et sur le site en
+production. Voir [`backend/AUDIT.md`](AUDIT.md), section « Risques de centralisation », pour ce
+que ça change concrètement (le prix de l'or suit désormais le marché réel ; seul le taux de change
+reste administré) et ce qui reste hors de sa portée (`SILVER` et le marché immobilier restent
 entièrement manuels).
 
 ## Notes de sécurité
