@@ -3,6 +3,7 @@ pragma solidity 0.8.35;
 
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { AccessManaged } from "./access/AccessManaged.sol";
 import { AssetAdapter } from "./AssetAdapter.sol";
 import { IWrappedToken } from "./interfaces/IWrappedToken.sol";
@@ -15,6 +16,13 @@ import { IWrappedToken } from "./interfaces/IWrappedToken.sol";
 ///         Treasury détient au titre des frais. Rien n'est jamais émis sans dépôt
 ///         correspondant, rien n'est jamais brûlé sans libération du collatéral correspondant.
 contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
+    // AUDIT.md finding 5: registerAsset accepts an arbitrary wrapped-token address, and
+    // IWrappedToken's transferFrom return value went unchecked below — GLDToken's OZ ERC20
+    // reverts on failure so this wasn't exploitable today, but a token that returns false
+    // instead of reverting would silently skip the fee transfer. SafeERC20 is already the
+    // project's own pattern for tokens it doesn't control (see Treasury.sol).
+    using SafeERC20 for IWrappedToken;
+
     /// @notice Configuration d'un actif enregistré.
     /// @param adapter Adaptateur qui a la garde du sous-jacent.
     /// @param wrappedToken Token wrappé émis contre cet actif.
@@ -31,6 +39,13 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
 
     /// @dev Dénominateur des points de base : 10 000 bps = 100 %.
     uint256 private constant BPS_DENOMINATOR = 10_000;
+
+    /// @dev Plafond dur sur chaque frais, en points de base — 500 bps = 5 %. Avant ce plafond,
+    ///      la seule borne était 10 000 bps (100 %) : un ASSET_MANAGER_ROLE compromis ou
+    ///      malveillant pouvait fixer un frais à 100 % et vider en une transaction tout dépôt ou
+    ///      rachat suivant vers le Treasury (AUDIT.md constat n°2). Une borne dans le code vaut
+    ///      mieux qu'une borne dans une intention.
+    uint16 private constant MAX_FEE_BPS = 500;
 
     /// @notice Contrat qui reçoit les frais de protocole.
     address public immutable treasury;
@@ -90,9 +105,14 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
     ///         vers un autre adaptateur.
     /// @param assetId Identifiant déjà enregistré.
     error AssetAlreadyRegistered(bytes32 assetId);
-    /// @notice Des frais supérieurs à 100 % ont été demandés.
+    /// @notice Des frais supérieurs au plafond `MAX_FEE_BPS` ont été demandés.
     /// @param feeBps Valeur refusée, en points de base.
     error FeeTooHigh(uint16 feeBps);
+    /// @notice L'adaptateur fourni ne se reconnaît pas sous cet `assetId` — enregistrement
+    ///         refusé plutôt que de créer un actif dont le collatéral et l'identifiant divergent.
+    /// @param assetId Identifiant sous lequel l'enregistrement a été demandé.
+    /// @param adapterAssetId Identifiant que l'adaptateur porte réellement.
+    error AssetIdMismatch(bytes32 assetId, bytes32 adapterAssetId);
 
     /// @param accessManager_ Adresse de l'AccessManager du protocole.
     /// @param treasury_ Contrat destinataire des frais.
@@ -116,6 +136,8 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         uint16 redeemFeeBps
     ) external onlyRole(accessManager.FACTORY_ROLE()) {
         if (address(assets[assetId].adapter) != address(0)) revert AssetAlreadyRegistered(assetId);
+        bytes32 adapterAssetId = AssetAdapter(adapter).assetId();
+        if (adapterAssetId != assetId) revert AssetIdMismatch(assetId, adapterAssetId);
         _validateFees(depositFeeBps, redeemFeeBps);
 
         assets[assetId] = AssetConfig({
@@ -265,7 +287,7 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         // La part de frais est transférée au Treasury et non brûlée : elle reste adossée au
         // collatéral qui demeure verrouillé dans l'adaptateur. Seule la part nette est brûlée,
         // et c'est exactement elle qui donne lieu à libération de sous-jacent.
-        if (feeAmount > 0) config.wrappedToken.transferFrom(redeemer, treasury, feeAmount);
+        if (feeAmount > 0) config.wrappedToken.safeTransferFrom(redeemer, treasury, feeAmount);
         config.wrappedToken.burnFrom(redeemer, netAmount);
 
         underlyingAmount = config.adapter.withdraw(redeemer, netAmount);
@@ -273,11 +295,11 @@ contract VaultManager is AccessManaged, Pausable, ReentrancyGuard {
         emit Redeemed(assetId, redeemer, wrappedAmount, underlyingAmount, feeAmount);
     }
 
-    /// @notice Refuse tout taux de frais supérieur à 100 %.
+    /// @notice Refuse tout taux de frais supérieur à `MAX_FEE_BPS`.
     /// @param depositFeeBps Frais de dépôt proposés, en points de base.
     /// @param redeemFeeBps Frais de rachat proposés, en points de base.
     function _validateFees(uint16 depositFeeBps, uint16 redeemFeeBps) private pure {
-        if (depositFeeBps > BPS_DENOMINATOR) revert FeeTooHigh(depositFeeBps);
-        if (redeemFeeBps > BPS_DENOMINATOR) revert FeeTooHigh(redeemFeeBps);
+        if (depositFeeBps > MAX_FEE_BPS) revert FeeTooHigh(depositFeeBps);
+        if (redeemFeeBps > MAX_FEE_BPS) revert FeeTooHigh(redeemFeeBps);
     }
 }

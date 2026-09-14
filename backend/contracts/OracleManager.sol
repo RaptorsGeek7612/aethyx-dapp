@@ -135,7 +135,15 @@ contract OracleManager is AccessManaged {
             // exclue exactement comme le serait un prix périmé ou nul — elle n'entraîne jamais
             // l'échec de toute l'agrégation.
             try IPriceSource(sources[i]).latestPrice(assetId) returns (uint256 p, uint256 updatedAt) {
-                if (p == 0 || block.timestamp - updatedAt > config.maxStaleness) continue;
+                // `updatedAt > block.timestamp` checked before the subtraction below, not after:
+                // `try`'s `returns` block runs in the caller's context, so an underflow here
+                // would revert getPrice entirely instead of being caught by `catch` — exactly
+                // the failure this try/catch exists to prevent (AUDIT.md finding 4). A source
+                // claiming a future timestamp is excluded like any other malformed reading, not
+                // trusted enough to crash the whole aggregation.
+                if (p == 0 || updatedAt > block.timestamp || block.timestamp - updatedAt > config.maxStaleness) {
+                    continue;
+                }
                 fresh[freshCount++] = p;
                 if (updatedAt < worstUpdatedAt) worstUpdatedAt = updatedAt;
             } catch {

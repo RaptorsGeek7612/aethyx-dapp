@@ -148,4 +148,24 @@ contract OracleManagerTest is Test {
         vm.expectRevert(abi.encodeWithSelector(OracleManager.InsufficientFreshSources.selector, GOLD, 1, MIN_SOURCES));
         oracle.getPrice(GOLD);
     }
+
+    /// @notice AUDIT.md finding 4: a source claiming an updatedAt in the future must be excluded
+    ///         like any other malformed reading, not crash the whole aggregation. Before the fix,
+    ///         `block.timestamp - updatedAt` underflowed inside the try's `returns` block — which
+    ///         runs in getPrice's own context, so the underflow reverted getPrice entirely instead
+    ///         of being caught by `catch`. Reproduced here directly with a source vm.warp put in
+    ///         the future relative to the block getPrice is called in, rather than mocking the
+    ///         source dishonestly — the fix must hold against a source that is merely stale in the
+    ///         other direction from what maxStaleness checks, not just against the exact bug.
+    function test_ExcludesSourceClaimingFutureTimestampWithoutReverting() public {
+        MockPriceSource future = new MockPriceSource();
+        future.setPrice(100e18, block.timestamp + 1 days);
+        oracle.addPriceSource(GOLD, address(future));
+        _addSource(200e18);
+
+        // Below MIN_SOURCES once the future-dated source is correctly excluded — proves it was
+        // excluded, not merely that the call happened not to revert.
+        vm.expectRevert(abi.encodeWithSelector(OracleManager.InsufficientFreshSources.selector, GOLD, 1, MIN_SOURCES));
+        oracle.getPrice(GOLD);
+    }
 }

@@ -33,6 +33,10 @@ abstract contract AssetAdapter {
     error ComplianceCheckFailed(address from, address to, uint256 amount);
     /// @notice Le token sous-jacent a renvoyé false au lieu de transférer.
     error TransferFailed();
+    /// @notice La conversion vers les décimales du sous-jacent a tronqué un montant non nul à
+    ///         zéro — le rachat brûlerait du token wrappé sans rien restituer en échange.
+    /// @param normalizedAmount Montant demandé, en 18 décimales canoniques.
+    error DustWithdrawal(uint256 normalizedAmount);
 
     /// @notice Restreint la fonction au seul VaultManager.
     modifier onlyVaultManager() {
@@ -73,6 +77,12 @@ abstract contract AssetAdapter {
     /// @return amount Quantité réellement transférée, dans les décimales du token sous-jacent.
     function withdraw(address to, uint256 normalizedAmount) public virtual onlyVaultManager returns (uint256 amount) {
         amount = _fromCanonical(normalizedAmount);
+        // AUDIT.md finding 3: for an underlying with fewer than 18 decimals, _fromCanonical is a
+        // truncating division. A normalized amount smaller than the conversion factor rounds to
+        // zero — without this check, VaultManager would still burn the caller's wrapped tokens
+        // and transfer nothing back. Only the truncation-to-zero case reverts; every other
+        // amount already round-trips exactly (see AssetAdapterDecimals.ts).
+        if (amount == 0 && normalizedAmount != 0) revert DustWithdrawal(normalizedAmount);
         if (!underlying.canTransfer(address(this), to, amount)) {
             revert ComplianceCheckFailed(address(this), to, amount);
         }
