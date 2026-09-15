@@ -121,10 +121,7 @@ await (await oracleManager.connect(admin).addPriceSource(goldAssetId, sourceOne)
 await (await oracleManager.connect(admin).addPriceSource(goldAssetId, sourceTwo)).wait();
 console.log("Registered both fresh sources under GOLD");
 
-writeFileSync(
-  `${deploymentDir}/gold-price-source.json`,
-  JSON.stringify({ sourceOne, sourceTwo }, null, 2) + "\n",
-);
+writeFileSync(`${deploymentDir}/gold-price-source.json`, JSON.stringify({ sourceOne, sourceTwo }, null, 2) + "\n");
 
 const [finalPrice, finalUpdatedAt] = await oracleManager.getPrice(goldAssetId);
 console.log(

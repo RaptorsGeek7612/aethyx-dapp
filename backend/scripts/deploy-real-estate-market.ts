@@ -46,7 +46,14 @@ const LABEL = `${BASE_LABEL}_${VERSION}`;
 // Markets to inherit the ERC-3643 underlying from, newest first. Reusing the token rather than
 // minting a parallel one means a holder's untouched underlying balance still works with the new
 // market; each superseded market keeps custody of whatever was already deposited against it.
-const UNDERLYING_SOURCES = [`${BASE_LABEL}_V7`, `${BASE_LABEL}_V6`, `${BASE_LABEL}_V5`, `${BASE_LABEL}_V4`, `${BASE_LABEL}_V3`, BASE_LABEL];
+const UNDERLYING_SOURCES = [
+  `${BASE_LABEL}_V7`,
+  `${BASE_LABEL}_V6`,
+  `${BASE_LABEL}_V5`,
+  `${BASE_LABEL}_V4`,
+  `${BASE_LABEL}_V3`,
+  BASE_LABEL,
+];
 
 const networkName = process.env.SEED_NETWORK ?? "sepolia";
 const { ethers } = await network.create({ network: networkName, chainType: "l1" });

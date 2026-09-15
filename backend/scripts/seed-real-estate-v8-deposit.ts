@@ -47,4 +47,9 @@ if (allowance < DEPOSIT_AMOUNT) {
 }
 
 await (await gateway.connect(admin).deposit(ethers.id(REAL_ESTATE_LABEL), DEPOSIT_AMOUNT)).wait();
-console.log("Deposited", ethers.formatUnits(DEPOSIT_AMOUNT, 18), "— new supply:", ethers.formatUnits(await wrapped.totalSupply(), 18));
+console.log(
+  "Deposited",
+  ethers.formatUnits(DEPOSIT_AMOUNT, 18),
+  "— new supply:",
+  ethers.formatUnits(await wrapped.totalSupply(), 18),
+);
