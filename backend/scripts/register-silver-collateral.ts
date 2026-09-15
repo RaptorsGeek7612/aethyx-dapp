@@ -27,8 +27,8 @@ const chainId = (await ethers.provider.getNetwork()).chainId;
 const deploymentDir = `ignition/deployments/chain-${chainId}`;
 
 const deployed = JSON.parse(readFileSync(`${deploymentDir}/deployed_addresses.json`, "utf8")) as Record<string, string>;
-const oracleManagerAddress = deployed["InvestOrGateway#OracleManager"];
-const vaultManagerAddress = deployed["InvestOrGateway#VaultManager"];
+const oracleManagerAddress = deployed["AethyxGateway#OracleManager"];
+const vaultManagerAddress = deployed["AethyxGateway#VaultManager"];
 
 const cdpRecord = JSON.parse(readFileSync(`${deploymentDir}/cdp.json`, "utf8")) as {
   stableToken: string;

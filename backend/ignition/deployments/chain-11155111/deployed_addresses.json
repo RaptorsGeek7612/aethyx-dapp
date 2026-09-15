@@ -8,5 +8,15 @@
   "InvestOrGateway#GoldAssetFactory": "0x6BDd2C9eEb6031b8d2aBc49b5d080cc13CA87941",
   "InvestOrGateway#InvestOrGateway": "0xb2aE412cE8c8af237Df28cF1fE06599D33F08d59",
   "InvestOrGateway#RealEstateAssetFactory": "0xa830F1B1ed23cDB1E74257F3fEcbBCb86338Da10",
-  "InvestOrGateway#SilverAssetFactory": "0x0AFE40BC4Ae1603Ba86Af972eec1D422E9ce42f0"
+  "InvestOrGateway#SilverAssetFactory": "0x0AFE40BC4Ae1603Ba86Af972eec1D422E9ce42f0",
+  "AethyxGateway#AccessManager": "0xf9c34A30845353F7B91a6655f80c03417b1f659F",
+  "AethyxGateway#OracleManager": "0x356eF62639e8Fd2c932E0c059Ed2C7Dca96AE96d",
+  "AethyxGateway#Treasury": "0x2e93C4D449ec74B7F686903335Be4C0085d67a02",
+  "AethyxGateway#VaultManager": "0xd3aB44E886f9ACf8109598a497F1F9d23CA98496",
+  "AethyxGateway#priceSourcePrimary": "0x16A1f7EF1DcEE3d8CeCBb24751869E53986634D7",
+  "AethyxGateway#priceSourceSecondary": "0x304a4D91E377bFfd96822a08aCBe26c70Cc4D13c",
+  "AethyxGateway#AethyxGateway": "0x9a86fD02247AdCbBCC0d83FaABbFd0Ea936ec279",
+  "AethyxGateway#GoldAssetFactory": "0x8e9B45B41BEa26cb2850042eE26e9f23230E2795",
+  "AethyxGateway#RealEstateAssetFactory": "0x4215eFd0b20cDB829Ec32Fb70aa137f28AE1c8b4",
+  "AethyxGateway#SilverAssetFactory": "0x063FF031780cE9b0824bE18AC75A54d8C8AD7B2a"
 }

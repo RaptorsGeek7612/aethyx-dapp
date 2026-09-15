@@ -112,25 +112,21 @@ retirée accessible (repay/withdraw/liquidate, pas de nouveaux dépôts/emprunts
 faire disparaître de l'UI au moment d'un redéploiement — voir
 `frontend/src/config/contracts.ts#CDP_MANAGERS` et `NEXT_PUBLIC_CDP_MANAGER_LEGACY_ADDRESSES`.
 
-Déployé initialement sur Sepolia par `scripts/deploy-cdp.ts`, avec `GOLD` comme premier collatéral
-(150 % / 130 %, frais de stabilité 2 %/an, fonds d'assurance à 50 % du frais — voir
-`backend/AUDIT.md`, constat n°8). `SILVER` a suivi aux mêmes paramètres
-(`scripts/register-silver-collateral.ts`). Le `CDPManager` a été redéployé le 2026-09-13
-(`scripts/redeploy-cdp-manager.ts`) pour la liquidation partielle ci-dessus — les contrats ne sont
-pas mutables sur place, donc l'instance précédente reste utilisable pour ses positions déjà
-ouvertes (elle avait encore ~1,10 ioEUR de dette GOLD ouverte au moment du redéploiement) mais
-n'accepte plus de nouveaux types de collatéral. `GOLD` et `SILVER` ont été réenregistrés sur la
-nouvelle instance, puis `REAL_ESTATE_PARIS_01_V7` (200 % / 160 %, frais 3 %/an, bonus 10 % — plus
-conservateur car ce marché n'a pas de prix de marché indépendant : son prix
-(estimation ÷ offre en circulation) doit être repoussé manuellement via
-`scripts/update-real-estate-price.ts` après chaque dépôt/rachat sur ce marché, sous peine de
+Redéployé le 2026-09-15 en même temps que le protocole cœur (voir ci-dessus, correctifs 2-6) par
+`scripts/deploy-cdp.ts`, avec `GOLD` comme premier collatéral (150 % / 130 %, frais de stabilité
+2 %/an, fonds d'assurance à 50 % du frais — voir `backend/AUDIT.md`, constat n°8). `SILVER` a suivi
+aux mêmes paramètres (`scripts/register-silver-collateral.ts`), puis `REAL_ESTATE_PARIS_01_V8`
+(200 % / 160 %, frais 3 %/an, bonus 10 % — plus conservateur car ce marché n'a pas de prix de
+marché indépendant : son prix (estimation ÷ offre en circulation) doit être repoussé manuellement
+via `scripts/update-real-estate-price.ts` après chaque dépôt/rachat sur ce marché, sous peine de
 devenir obsolète) :
 
 | Composant | Adresse |
 |---|---|
-| `StableToken` (`ioEUR`) | `0x5777897918ceDb97D7380cb034b265B32545E5cb` |
-| `CDPManager` (courant, depuis 2026-09-13) | `0x5BB42b987e7F777699f48F4354c1642ed14D8c8C` |
-| `CDPManager` (retiré, encore accessible en lecture/gestion) | `0xA3C28Deb0E34086cA7b69AD26c19Dcf78BbA2F1d` |
+| `StableToken` (`ioEUR`) | `0xFeDe98257a6B15958478F90AE2Fcf38A33Fb5020` |
+| `CDPManager` (courant, depuis 2026-09-15) | `0x6cb309d980890f4d294a339c33FA50821DBBceDA` |
+| `CDPManager` (retiré, sur l'ancien protocole cœur, encore accessible en lecture/gestion) | `0x5BB42b987e7F777699f48F4354c1642ed14D8c8C` |
+| `CDPManager` (deux générations retirées, encore accessible) | `0xA3C28Deb0E34086cA7b69AD26c19Dcf78BbA2F1d` |
 
 Voir [`backend/README.md`](backend/README.md#module-cdp) pour redéployer ou retrofitter ce module
 sur un autre réseau : `ignition/modules/CDP.ts` compose le protocole cœur sur un réseau neuf,
@@ -181,49 +177,51 @@ npx hardhat ignition deploy ignition/modules/AethyxGateway.ts --network sepolia
 SEED_NETWORK=sepolia npx hardhat run scripts/seed-demo-assets.ts --network sepolia
 ```
 
-Déploiement Sepolia courant (`backend/ignition/deployments/chain-11155111/`), redéployé pour
-inclure le verrouillage de `ROUTER_ROLE` et le durcissement d'`OracleManager` — vérifié
-`exact_match` sur [Sourcify](https://sourcify.dev) :
+Déploiement Sepolia courant (`backend/ignition/deployments/chain-11155111/`), redéployé le
+2026-09-15 pour mettre en production les correctifs 2-6 de [`backend/AUDIT.md`](backend/AUDIT.md)
+(plafond de frais, poussière de rachat, horodatage futur de l'oracle, `SafeERC20`, cohérence
+`assetId`) — protocole cœur, pas mutable sur place, donc redéploiement complet plutôt que ciblé :
 
 | Contrat | Adresse |
 |---|---|
-| Gateway¹ | `0xb2aE412cE8c8af237Df28cF1fE06599D33F08d59` |
-| `VaultManager` | `0x63C5bACc8C4c8d6b18e1c909fAF4b8C5F6646b53` |
-| `OracleManager` | `0x3B5d8fbF69e4672D618639437d13A09204104DF5` |
-| `AccessManager` | `0x177528950CD48409c5bC74a8B9A1e280c7e8072f` |
-| `Treasury` | `0xCF8D2F6ecc058555C28DCa1838F76FEf71cf9Bd9` |
-| `GoldAssetFactory` | `0x6BDd2C9eEb6031b8d2aBc49b5d080cc13CA87941` |
-| `SilverAssetFactory` | `0x0AFE40BC4Ae1603Ba86Af972eec1D422E9ce42f0` |
-| `RealEstateAssetFactory` | `0x0d759a29967EfC713Bd44682e5A1193848d692cE` |
-| `priceSourcePrimary` (ManualPriceSource) | `0x7656d3AdC0c464a8945417697Ceb78640B8a8933` |
-| `priceSourceSecondary` (ManualPriceSource) | `0x21D2e5dc6D2400c460039F8597c148429d12cd2f` |
-| `ChainlinkPriceSource` (vrai flux Sepolia XAU/USD) | `0x8e6ded34eeE24F6270F696eeDFfbD479Dd0bdb4A` |
-| `ChainlinkGoldEurPerGramPriceSource` ×2 (sources actives de `GOLD` depuis le 14/09/2026) | `0x210Fa1Da88E3a3aD16910E1a07d1330327eA86e8`, `0x89aF3c2623473e1d8b900d0F8F029E1832A669a9` |
+| Gateway¹ | `0x9a86fD02247AdCbBCC0d83FaABbFd0Ea936ec279` |
+| `VaultManager` | `0xd3aB44E886f9ACf8109598a497F1F9d23CA98496` |
+| `OracleManager` | `0x356eF62639e8Fd2c932E0c059Ed2C7Dca96AE96d` |
+| `AccessManager` | `0xf9c34A30845353F7B91a6655f80c03417b1f659F` |
+| `Treasury` | `0x2e93C4D449ec74B7F686903335Be4C0085d67a02` |
+| `GoldAssetFactory` | `0x8e9B45B41BEa26cb2850042eE26e9f23230E2795` |
+| `SilverAssetFactory` | `0x063FF031780cE9b0824bE18AC75A54d8C8AD7B2a` |
+| `RealEstateAssetFactory` | `0xd6EB26771daD2FF538b4e317f3cdAdd45bCC40fA` |
+| `priceSourcePrimary` (ManualPriceSource) | `0x16A1f7EF1DcEE3d8CeCBb24751869E53986634D7` |
+| `priceSourceSecondary` (ManualPriceSource) | `0x304a4D91E377bFfd96822a08aCBe26c70Cc4D13c` |
+| `ChainlinkPriceSource` (vrai flux Sepolia XAU/USD, réutilisé tel quel) | `0x8e6ded34eeE24F6270F696eeDFfbD479Dd0bdb4A` |
+| `ChainlinkGoldEurPerGramPriceSource` ×2 (sources actives de `GOLD`) | `0x3598965844edC09d109369a0437aceE0c05A8136`, `0x0a004F2e3c5a3cf8048CDe132829d0B08b43592b` |
 
 ¹ Ce déploiement précède le renommage en AETHYX : sur Sourcify et Etherscan, ce contrat reste
 vérifié sous son nom de code source d'origine, antérieur au renommage — immuable une fois
 déployé, il ne peut pas être renommé sans redéploiement complet. Le code source actuel l'appelle
 `AethyxGateway` ; voir `backend/contracts/AethyxGateway.sol`.
 
+L'ancien protocole cœur (`VaultManager` `0x63C5bACc8C4c8d6b18e1c909fAF4b8C5F6646b53` et tout ce
+qui en dépendait) reste intégralement fonctionnel on-chain — le frontend cesse seulement de le
+référencer, comme pour chaque génération de marché immobilier ci-dessous.
+
 Marché immobilier courant, déployé par `scripts/deploy-real-estate-market.ts` sous l'identifiant
-`REAL_ESTATE_PARIS_01_V7` (30 jours, échéancier commun au marché — voir
-[`backend/AUDIT.md`](backend/AUDIT.md), constat n°1) le 2026-09-14 — voir
-`ignition/deployments/chain-11155111/real_estate_market.json`. Tous vérifiés sur Sourcify :
+`REAL_ESTATE_PARIS_01_V8` (30 jours, échéancier commun au marché — voir
+[`backend/AUDIT.md`](backend/AUDIT.md), constat n°1) le 2026-09-15, sur le protocole cœur ci-dessus
+— voir `ignition/deployments/chain-11155111/real_estate_market.json` :
 
 | Composant | Adresse |
 |---|---|
-| `RealEstateAdapter` | `0x53E62D4A5a432A94e38b0D9d61E4Ca0cAF09586E` |
-| Token wrappé (`RLD`) | `0x2Cf65cf7b62e3A510d6Ec0c267Fa357d1CD9193B` |
-| Sous-jacent ERC-3643 | `0x49CEfD290FcdCDb951E68C68cbae7400551aebf9` |
-| `RealEstateAssetFactory` (redéployée) | `0xa830F1B1ed23cDB1E74257F3fEcbBCb86338Da10` |
+| `RealEstateAdapter` | `0xb1b7d1f82C5A185521dE718D56CbEA8c92fEfA98` |
+| Token wrappé (`RLD`) | `0x9f562dDfdBcb93cb5Bf3109437de63668FE23128` |
+| Sous-jacent ERC-3643 | `0xA8a3F8cE130b2267A4f7f59bD0769Bf631A0316E` |
+| `RealEstateAssetFactory` | `0xd6EB26771daD2FF538b4e317f3cdAdd45bCC40fA` (celle du protocole cœur ci-dessus) |
 
-`REAL_ESTATE_PARIS_01_V6` et les versions antérieures restent enregistrées et actives sur
-`VaultManager` — le frontend ne les référence plus, mais quiconque détient déjà leur token
-wrappé peut encore les utiliser (avec l'auto-transfert d'origine intact sur ces versions-là
-spécifiquement, voir constat n°1). La fabrique qui a produit `V6`
-(`0x1cd0c39Df0135895b39cDf4f617b387607689B9D`) émettait encore l'adaptateur à échéance par dépôt :
-une fabrique fige le bytecode de son adaptateur au moment où elle est compilée. Voir
-[`backend/AUDIT.md`](backend/AUDIT.md), constat n°7.
+`REAL_ESTATE_PARIS_01_V7` et les versions antérieures restent enregistrées et actives sur
+l'**ancien** `VaultManager` — le frontend ne les référence plus, mais quiconque détient déjà leur
+token wrappé peut encore les utiliser. Voir [`backend/AUDIT.md`](backend/AUDIT.md), constats n°1 et
+n°7, pour l'historique de ces versions.
 
 `ChainlinkPriceSource` est enregistré dans `OracleManager` sous son propre identifiant d'actif
 `GOLD_USD_OZ`, et non sous `GOLD` : le flux réel publie des dollars par once troy, tandis que les

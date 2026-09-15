@@ -38,20 +38,39 @@ export const CDP_MANAGER_LEGACY_ADDRESSES = rawLegacyManagers
   .map((address) => address.trim())
   .filter((address): address is Address => address.length > 0) as Address[];
 
+// Only the *original* CDPManager (pre-AUDIT.md finding 12) uses the narrow `collaterals` shape
+// (no liquidationBonusBps) and the 2-argument `liquidate` — see cdpManagerLegacyAbi's own comment.
+// Every CDPManager deployed since finding 12 already has the current shape, including ones that
+// later became "legacy" themselves (retired from new deposits/borrows, but not narrower ABI-wise)
+// — conflating "retired" with "narrow ABI" reads the wrong tuple index on those. List addresses
+// here that need the narrow ABI specifically; anything in CDP_MANAGER_LEGACY_ADDRESSES but not
+// here is legacy-as-in-retired only, decoded with the current-shape ABI.
+const rawLegacyAbiManagers = process.env.NEXT_PUBLIC_CDP_MANAGER_LEGACY_ABI_ADDRESSES ?? "";
+export const CDP_MANAGER_LEGACY_ABI_ADDRESSES = rawLegacyAbiManagers
+  .split(",")
+  .map((address) => address.trim().toLowerCase())
+  .filter((address): address is string => address.length > 0);
+
 export interface CdpManagerRef {
   address: Address;
   label: string;
+  /** Retired: no longer accepts new deposits/borrows, but still readable/manageable. */
   legacy: boolean;
+  /** Narrow pre-finding-12 `collaterals` shape and 2-arg `liquidate` — see the const above. */
+  legacyAbi: boolean;
 }
 
 // Current instance first — it's the one every selector defaults to and the only one new
 // collateral types get registered on.
 export const CDP_MANAGERS: CdpManagerRef[] = [
-  ...(CDP_MANAGER_ADDRESS ? [{ address: CDP_MANAGER_ADDRESS as Address, label: "Current", legacy: false }] : []),
+  ...(CDP_MANAGER_ADDRESS
+    ? [{ address: CDP_MANAGER_ADDRESS as Address, label: "Current", legacy: false, legacyAbi: false }]
+    : []),
   ...CDP_MANAGER_LEGACY_ADDRESSES.map((address, index) => ({
     address,
     label: CDP_MANAGER_LEGACY_ADDRESSES.length > 1 ? `Legacy ${index + 1}` : "Legacy",
     legacy: true,
+    legacyAbi: CDP_MANAGER_LEGACY_ABI_ADDRESSES.includes(address.toLowerCase()),
   })),
 ];
 

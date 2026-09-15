@@ -41,10 +41,10 @@ const chainId = (await ethers.provider.getNetwork()).chainId;
 const deploymentDir = `ignition/deployments/chain-${chainId}`;
 
 const deployed = JSON.parse(readFileSync(`${deploymentDir}/deployed_addresses.json`, "utf8")) as Record<string, string>;
-const accessManagerAddress = deployed["InvestOrGateway#AccessManager"];
-const oracleManagerAddress = deployed["InvestOrGateway#OracleManager"];
-const vaultManagerAddress = deployed["InvestOrGateway#VaultManager"];
-const treasuryAddress = deployed["InvestOrGateway#Treasury"];
+const accessManagerAddress = deployed["AethyxGateway#AccessManager"];
+const oracleManagerAddress = deployed["AethyxGateway#OracleManager"];
+const vaultManagerAddress = deployed["AethyxGateway#VaultManager"];
+const treasuryAddress = deployed["AethyxGateway#Treasury"];
 
 const [admin] = await ethers.getSigners();
 console.log("Deploying CDP module as", admin.address, "on", networkName);

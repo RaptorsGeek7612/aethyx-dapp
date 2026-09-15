@@ -16,10 +16,10 @@ const deployed = JSON.parse(
   readFileSync(`ignition/deployments/chain-${chainId}/deployed_addresses.json`, "utf8"),
 ) as Record<string, string>;
 
-const vaultManagerAddress = deployed["InvestOrGateway#VaultManager"];
-const goldFactoryAddress = deployed["InvestOrGateway#GoldAssetFactory"];
-const silverFactoryAddress = deployed["InvestOrGateway#SilverAssetFactory"];
-const realEstateFactoryAddress = deployed["InvestOrGateway#RealEstateAssetFactory"];
+const vaultManagerAddress = deployed["AethyxGateway#VaultManager"];
+const goldFactoryAddress = deployed["AethyxGateway#GoldAssetFactory"];
+const silverFactoryAddress = deployed["AethyxGateway#SilverAssetFactory"];
+const realEstateFactoryAddress = deployed["AethyxGateway#RealEstateAssetFactory"];
 
 const [admin] = await ethers.getSigners();
 console.log("Seeding demo assets as", admin.address);

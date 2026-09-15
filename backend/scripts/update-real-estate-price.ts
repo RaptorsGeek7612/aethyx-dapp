@@ -18,7 +18,7 @@ import { network } from "hardhat";
 // market exactly — the two aren't linked on-chain, so this is the one place they can silently
 // drift apart if changed in only one of them.
 
-const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V6";
+const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V8";
 
 const networkName = process.env.SEED_NETWORK ?? "localhost";
 const { ethers } = await network.create({ network: networkName, chainType: "l1" });
@@ -26,10 +26,10 @@ const chainId = (await ethers.provider.getNetwork()).chainId;
 const deploymentDir = `ignition/deployments/chain-${chainId}`;
 
 const deployed = JSON.parse(readFileSync(`${deploymentDir}/deployed_addresses.json`, "utf8")) as Record<string, string>;
-const vaultManagerAddress = deployed["InvestOrGateway#VaultManager"];
+const vaultManagerAddress = deployed["AethyxGateway#VaultManager"];
 const priceSourceAddresses = [
-  deployed["InvestOrGateway#priceSourcePrimary"],
-  deployed["InvestOrGateway#priceSourceSecondary"],
+  deployed["AethyxGateway#priceSourcePrimary"],
+  deployed["AethyxGateway#priceSourceSecondary"],
 ].filter((address): address is string => Boolean(address));
 
 if (priceSourceAddresses.length === 0) {

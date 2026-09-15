@@ -19,7 +19,7 @@ const chainId = (await ethers.provider.getNetwork()).chainId;
 const deployed = JSON.parse(
   readFileSync(`ignition/deployments/chain-${chainId}/deployed_addresses.json`, "utf8"),
 ) as Record<string, string>;
-const oracleManagerAddress = deployed["InvestOrGateway#OracleManager"];
+const oracleManagerAddress = deployed["AethyxGateway#OracleManager"];
 
 const oracleManager = await ethers.getContractAt("OracleManager", oracleManagerAddress);
 const [price, updatedAt] = await oracleManager.getPrice(ethers.id(assetIdLabel));

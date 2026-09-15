@@ -44,10 +44,10 @@ const chainId = (await ethers.provider.getNetwork()).chainId;
 const deploymentDir = `ignition/deployments/chain-${chainId}`;
 
 const deployed = JSON.parse(readFileSync(`${deploymentDir}/deployed_addresses.json`, "utf8")) as Record<string, string>;
-const accessManagerAddress = deployed["InvestOrGateway#AccessManager"];
-const oracleManagerAddress = deployed["InvestOrGateway#OracleManager"];
-const priceSourcePrimaryAddress = deployed["InvestOrGateway#priceSourcePrimary"];
-const priceSourceSecondaryAddress = deployed["InvestOrGateway#priceSourceSecondary"];
+const accessManagerAddress = deployed["AethyxGateway#AccessManager"];
+const oracleManagerAddress = deployed["AethyxGateway#OracleManager"];
+const priceSourcePrimaryAddress = deployed["AethyxGateway#priceSourcePrimary"];
+const priceSourceSecondaryAddress = deployed["AethyxGateway#priceSourceSecondary"];
 
 const [admin] = await ethers.getSigners();
 console.log("Wiring the real gold price as", admin.address, "on", networkName);

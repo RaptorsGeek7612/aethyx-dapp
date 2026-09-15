@@ -7,3 +7,5 @@ node_modules/
 
 # Réglages d'éditeur, propres à chaque poste.
 .vscode/
+.vercel
+.env*

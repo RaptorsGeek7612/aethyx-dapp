@@ -3,13 +3,16 @@
 **Date** : 11 septembre 2026, étendu le 12 septembre 2026 au module CDP, à une passe de
 vérification Sourcify sur l'ensemble des contrats déployés (constats 10 et 11), le 13-14 septembre
 2026 à la liquidation partielle et au marché immobilier à échéancier commun (constat n°12,
-redéploiement du constat n°1), puis le 14 septembre 2026 aux constats 2-6 du protocole cœur
-(corrigés en source, pas encore déployés — voir chaque constat)
+redéploiement du constat n°1), le 14 septembre 2026 aux constats 2-6 du protocole cœur (corrigés
+en source), puis le 15 septembre 2026 au redéploiement complet du protocole cœur qui les met en
+production — voir chaque constat
 **Périmètre** : les 23 fichiers de `backend/contracts/` à `c6c1f48` pour les constats 1 à 7 ; les
 26 fichiers à `078176a` pour les constats 8 et 9, qui ajoutent `CDPManager.sol` et `StableToken.sol`
 **Nature** : revue interne par lecture de code, non une attestation par un tiers indépendant
-**Déploiement examiné** : Sepolia, `VaultManager` `0x63C5bACc…6b53` ; module CDP redéployé le
-13 septembre 2026, `CDPManager` `0x5BB42b98…D8c8C` (précédent : `0xA3C28Deb…2F1d`, toujours
+**Déploiement examiné** : Sepolia, `VaultManager` `0xd3aB44E8…8496` (protocole cœur redéployé le
+15 septembre 2026 pour les constats 2-6 ; précédent : `0x63C5bACc…6b53`, retiré du frontend mais
+fonctionnel on-chain) ; module CDP redéployé le même jour par-dessus, `CDPManager`
+`0x6cb309d9…BceDA` (précédent : `0x5BB42b98…D8c8C`, lui-même sur l'ancien protocole cœur, toujours
 accessible pour ses positions déjà ouvertes) — voir `backend/README.md#module-cdp`
 
 ## Synthèse
@@ -17,11 +20,11 @@ accessible pour ses positions déjà ouvertes) — voir `backend/README.md#modul
 | # | Constat | Sévérité | Statut |
 |---|---|---|---|
 | 1 | L'échéance immobilière se contourne par auto-transfert | **Élevée** | **Corrigé et déployé** (2026-09-14) — échéancier commun au marché, `REAL_ESTATE_PARIS_01_V7` |
-| 2 | Frais réglables jusqu'à 100 % | **Moyenne** | **Corrigé en source** (2026-09-14) — plafond `MAX_FEE_BPS = 500`, pas encore déployé |
-| 3 | Rachat de poussière : destruction sans contrepartie | **Faible** | **Corrigé en source** (2026-09-14) — revert sur troncature à zéro, pas encore déployé |
-| 4 | `getPrice` revert sur horodatage futur, hors `try/catch` | **Faible** | **Corrigé en source** (2026-09-14) — garde `updatedAt > block.timestamp`, pas encore déployé |
-| 5 | Valeur de retour de `transferFrom` ignorée | **Faible** | **Corrigé en source** (2026-09-14) — `SafeERC20`, pas encore déployé |
-| 6 | `registerAsset` ne vérifie pas la cohérence de l'`assetId` | **Faible** | **Corrigé en source** (2026-09-14) — `AssetIdMismatch`, pas encore déployé |
+| 2 | Frais réglables jusqu'à 100 % | **Moyenne** | **Corrigé et déployé** (2026-09-15) — plafond `MAX_FEE_BPS = 500` |
+| 3 | Rachat de poussière : destruction sans contrepartie | **Faible** | **Corrigé et déployé** (2026-09-15) — revert sur troncature à zéro |
+| 4 | `getPrice` revert sur horodatage futur, hors `try/catch` | **Faible** | **Corrigé et déployé** (2026-09-15) — garde `updatedAt > block.timestamp` |
+| 5 | Valeur de retour de `transferFrom` ignorée | **Faible** | **Corrigé et déployé** (2026-09-15) — `SafeERC20` |
+| 6 | `registerAsset` ne vérifie pas la cohérence de l'`assetId` | **Faible** | **Corrigé et déployé** (2026-09-15) — `AssetIdMismatch` |
 | 7 | Les fabriques figent le bytecode de leur adaptateur | **Moyenne** | **Corrigé** — fabrique redéployée, ancienne révoquée |
 | 8 | Liquidation du CDP sans socialisation de la mauvaise dette | **Moyenne à élevée selon paramètres** | **Mitigé** — fonds d'assurance alimenté par une part du frais de stabilité (`setInsuranceFundFeeBps`), mobilisé à la liquidation |
 | 9 | `addCollateralType` ne vérifie pas l'étalon du prix enregistré | **Faible à élevée selon l'erreur** | **Mitigé** — `deploy-cdp.ts` exige et vérifie une confirmation |
@@ -42,19 +45,36 @@ stabilité, comble désormais tout ou partie du manque d'une liquidation en bad 
 section dédiée ci-dessous pour ce que ça couvre et ce qui reste hors de sa portée. Le constat 10
 a été découvert et corrigé dans la foulée, en tentant effectivement ce déploiement.
 
-Marché en vigueur : `REAL_ESTATE_PARIS_01_V7`, adaptateur `0x53E62D4A…586E` (échéancier commun au
-marché, constat n°1), fabrique `0xa830F1B1…Da10`, enregistré comme collatéral CDP sur le nouveau
-`CDPManager` (constat n°12).
+Marché en vigueur depuis le 15 septembre 2026 (sur le protocole cœur redéployé pour les constats
+2-6, voir plus bas) : `REAL_ESTATE_PARIS_01_V8`, adaptateur `0xb1b7d1f8…FefA98` (échéancier commun
+au marché, constat n°1), fabrique du protocole cœur courant, enregistré comme collatéral CDP sur
+le `CDPManager` courant. `REAL_ESTATE_PARIS_01_V7` (adaptateur `0x53E62D4A…586E`, fabrique
+`0xa830F1B1…Da10`) reste le marché en vigueur sur l'**ancien** protocole cœur, retiré du frontend.
 
 Mise à jour du 14 septembre 2026 : les constats 2, 3, 4, 5 et 6 sont corrigés en source (chacun
 suit la recommandation de sa propre section, chacun testé — 94 tests passent, contre 85 avant
-cette passe) mais **aucun n'est déployé sur Sepolia**. Contrairement au module CDP (constat n°12),
-ces correctifs touchent `VaultManager.sol`, `AssetAdapter.sol` et `OracleManager.sol` — le
-protocole cœur, pas un module ajouté séparément — et ces contrats ne sont pas plus mutables sur
-place que les autres. Les déployer demande de redéployer GOLD, SILVER et le marché immobilier en
-cours ensemble, plus de reconfigurer le module CDP par-dessus (qui les référence par adresse) :
-une opération nettement plus large qu'un redéploiement ciblé, volontairement pas entreprise dans
-cette même session sans décision explicite de le faire.
+cette passe) mais, à cette date, aucun n'est déployé sur Sepolia. Contrairement au module CDP
+(constat n°12), ces correctifs touchent `VaultManager.sol`, `AssetAdapter.sol` et
+`OracleManager.sol` — le protocole cœur, pas un module ajouté séparément — et ces contrats ne sont
+pas plus mutables sur place que les autres. Les déployer demande de redéployer GOLD, SILVER et le
+marché immobilier ensemble, plus de reconfigurer le module CDP par-dessus (qui les référence par
+adresse) : une opération nettement plus large qu'un redéploiement ciblé, volontairement pas
+entreprise dans cette même session sans décision explicite de le faire.
+
+**Mise à jour du 15 septembre 2026 : fait.** Décision explicite prise de redéployer le protocole
+cœur en entier — nouveaux `AccessManager`, `VaultManager` (`0xd3aB44E8…8496`), `OracleManager`
+(`0x356eF626…E96d`), `Treasury`, les 3 fabriques et les 2 `ManualPriceSource` — puis GOLD, SILVER
+et un nouveau marché immobilier (`REAL_ESTATE_PARIS_01_V8`, même conception que V7 : échéancier
+commun, constat n°1) réenregistrés dessus, le prix réel de l'or recâblé sur ce nouvel oracle
+(même mécanisme que la section « Risques de centralisation » ci-dessous), et le module CDP
+(`StableToken`, `CDPManager` `0x6cb309d9…ceDA`) redéployé par-dessus avec GOLD/SILVER/l'immobilier
+réenregistrés comme collatéral. Les constats 2 à 6 sont donc **corrigés et déployés**. L'ancien
+protocole cœur (`VaultManager` `0x63C5bACc…6b53` et tout ce qui en dépendait, y compris le
+CDPManager qui en était le module CDP courant, `0x5BB42b98…D8c8C`) reste intégralement
+fonctionnel on-chain — le frontend cesse seulement de le référencer, exactement le traitement déjà
+appliqué aux versions immobilières antérieures et à l'ancien CDPManager (constat n°12). Comme ce
+protocole reste du code de démonstration/testnet, aucun fonds réel n'est en jeu dans cette
+bascule — voir « Limites de cet audit » en bas de page.
 
 Durcissement appliqué par `scripts/harden-legacy-real-estate.ts` : le `FACTORY_ROLE` de la fabrique
 remplacée `0x0d759a29…92cE` est révoqué, et cinq des sept marchés supersédés sont gelés. Deux
@@ -211,10 +231,10 @@ un `ASSET_MANAGER_ROLE` compromis. Testé (`test_RegisterAssetRevertsAboveMaxFee
 `test_SetAssetFeesRevertsAboveMaxFeeBps`, `test_RegisterAssetAcceptsFeeExactlyAtCap` dans
 `VaultManager.t.sol`). Pas de timelock ajouté : à 500 bps le pire cas (un rachat coûte 5 % au
 lieu de 0) n'a plus besoin d'une fenêtre de sortie, contrairement au cas à 100 % d'origine.
-**Pas encore déployé** — `VaultManager` n'est pas mutable sur place ; ce correctif n'atteint
-Sepolia qu'avec un redéploiement complet du protocole cœur, une opération bien plus large que le
-redéploiement ciblé du module CDP (constat n°12) puisqu'elle implique de remigrer GOLD, SILVER et
-le marché immobilier en cours.
+**Déployé** le 2026-09-15 — `VaultManager` n'étant pas mutable sur place, ce correctif a demandé
+un redéploiement complet du protocole cœur (`VaultManager` `0xd3aB44E8…8496`), plus large que le
+redéploiement ciblé du module CDP (constat n°12) puisqu'il a remigré GOLD, SILVER et l'immobilier
+sur des instances neuves — voir `backend/README.md` pour le détail des adresses.
 
 ---
 
@@ -240,11 +260,11 @@ décimales déjà couvert.
 **Statut.** Corrigé en source : `withdraw` revert désormais `DustWithdrawal(normalizedAmount)`
 quand la conversion tronque un montant non nul à zéro, avant tout transfert. Testé
 (`test_RedeemRevertsOnDustAmount`, et `test_RedeemStillSucceedsAboveDustThreshold` pour confirmer
-que le rachat normal, au-dessus du seuil de troncature, n'est pas affecté). Toujours latent sur
-Sepolia — les trois sous-jacents déployés restent en 18 décimales, où `_fromCanonical` est
-l'identité — mais le correctif est en place avant qu'un sous-jacent à moins de 18 décimales soit
-jamais enregistré. **Pas encore déployé**, même contrainte que le constat n°2 : `AssetAdapter`
-n'est pas mutable sur place.
+que le rachat normal, au-dessus du seuil de troncature, n'est pas affecté). **Déployé** le
+2026-09-15, même redéploiement complet que le constat n°2 — toujours sans effet observable sur
+Sepolia puisque les sous-jacents déployés restent en 18 décimales (`_fromCanonical` y est
+l'identité), mais le correctif est désormais en place avant qu'un sous-jacent à moins de 18
+décimales soit jamais enregistré.
 
 ---
 
@@ -272,8 +292,9 @@ Une source qui prétend connaître le futur mérite d'être écartée, pas crue.
 **Statut.** Corrigé en source exactement comme recommandé. Testé
 (`test_ExcludesSourceClaimingFutureTimestampWithoutReverting` dans `OracleManager.t.sol` :
 une source datée dans le futur est exclue de l'agrégation sans faire échouer `getPrice`, prouvé en
-faisant tomber le quorum sous `minSources` une fois cette source retranchée). **Pas encore
-déployé** — `OracleManager` n'est pas mutable sur place, même contrainte que les constats n°2 et 3.
+faisant tomber le quorum sous `minSources` une fois cette source retranchée). **Déployé** le
+2026-09-15, même redéploiement complet que les constats n°2 et 3 (`OracleManager`
+`0x356eF626…E96d`).
 
 ---
 
@@ -299,8 +320,8 @@ cet appel comme pour tout appel à un token dont le protocole ne contrôle pas l
 `Treasury.sol`). Testé directement (`test_RedeemRevertsWhenWrappedTokenFeeTransferReturnsFalse`
 dans `VaultManager.t.sol`, avec un token wrappé de test dont `transferFrom` renvoie `false` sans
 jamais revert — exactement le scénario que `GLDToken` ne peut pas reproduire puisqu'il revert
-déjà) : le rachat échoue franchement au lieu de laisser les frais impayés en silence. **Pas
-encore déployé**, même contrainte que les constats n°2, 3 et 4.
+déjà) : le rachat échoue franchement au lieu de laisser les frais impayés en silence. **Déployé**
+le 2026-09-15, même redéploiement complet que les constats n°2, 3 et 4.
 
 ---
 
@@ -323,7 +344,7 @@ vérification à l'enregistrement coûte une lecture unique et ferme la porte d�
 **Statut.** Corrigé en source exactement comme recommandé, avec une nouvelle erreur dédiée
 `AssetIdMismatch(assetId, adapterAssetId)` plutôt qu'une erreur générique. Testé
 (`test_RegisterAssetRevertsOnAssetIdMismatch`, `test_RegisterAssetSucceedsWhenAssetIdMatches`).
-**Pas encore déployé**, même contrainte que les constats n°2, 3, 4 et 5.
+**Déployé** le 2026-09-15, même redéploiement complet que les constats n°2, 3, 4 et 5.
 
 ---
 

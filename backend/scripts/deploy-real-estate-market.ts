@@ -35,7 +35,7 @@ import { network } from "hardhat";
 //
 // Re-running is safe: each step is skipped if it has already been done.
 
-const VERSION = "V7";
+const VERSION = "V8";
 // Durée de détention appliquée à chaque dépôt. Même durée pour tous, comptée depuis la date de
 // chaque dépôt : deux dépôts espacés de trois jours ouvrent des tranches distinctes dans le pool
 // commun. Voir RealEstateAdapter.sol.
@@ -46,7 +46,7 @@ const LABEL = `${BASE_LABEL}_${VERSION}`;
 // Markets to inherit the ERC-3643 underlying from, newest first. Reusing the token rather than
 // minting a parallel one means a holder's untouched underlying balance still works with the new
 // market; each superseded market keeps custody of whatever was already deposited against it.
-const UNDERLYING_SOURCES = [`${BASE_LABEL}_V6`, `${BASE_LABEL}_V5`, `${BASE_LABEL}_V4`, `${BASE_LABEL}_V3`, BASE_LABEL];
+const UNDERLYING_SOURCES = [`${BASE_LABEL}_V7`, `${BASE_LABEL}_V6`, `${BASE_LABEL}_V5`, `${BASE_LABEL}_V4`, `${BASE_LABEL}_V3`, BASE_LABEL];
 
 const networkName = process.env.SEED_NETWORK ?? "sepolia";
 const { ethers } = await network.create({ network: networkName, chainType: "l1" });
@@ -55,8 +55,8 @@ const deploymentDir = `ignition/deployments/chain-${chainId}`;
 
 const deployed = JSON.parse(readFileSync(`${deploymentDir}/deployed_addresses.json`, "utf8")) as Record<string, string>;
 
-const vaultManager = await ethers.getContractAt("VaultManager", deployed["InvestOrGateway#VaultManager"]);
-const accessManager = await ethers.getContractAt("AccessManager", deployed["InvestOrGateway#AccessManager"]);
+const vaultManager = await ethers.getContractAt("VaultManager", deployed["AethyxGateway#VaultManager"]);
+const accessManager = await ethers.getContractAt("AccessManager", deployed["AethyxGateway#AccessManager"]);
 
 const [admin] = await ethers.getSigners();
 console.log(`Deploying ${LABEL} as`, admin.address, "on", networkName);
@@ -80,7 +80,7 @@ if (alreadyRegistered) {
 // lockupPeriod argument. Immutables are written in place and never change the length, so equal
 // lengths mean the same code and any difference means a different adapter or a different
 // signature.
-const recordedFactory = deployed["InvestOrGateway#RealEstateAssetFactory"];
+const recordedFactory = deployed["AethyxGateway#RealEstateAssetFactory"];
 const localRuntime = (
   JSON.parse(readFileSync("artifacts/contracts/RealEstateAssetFactory.sol/RealEstateAssetFactory.json", "utf8")) as {
     deployedBytecode: string;
@@ -108,7 +108,7 @@ if (!factoryIsCurrent) {
   await (await accessManager.connect(admin).grantRole(factoryRole, factoryAddress)).wait();
   console.log("FACTORY_ROLE granted to", factoryAddress);
 
-  deployed["InvestOrGateway#RealEstateAssetFactory"] = factoryAddress;
+  deployed["AethyxGateway#RealEstateAssetFactory"] = factoryAddress;
   writeFileSync(`${deploymentDir}/deployed_addresses.json`, JSON.stringify(deployed, null, 2) + "\n");
   console.log("Recorded it in", `${deploymentDir}/deployed_addresses.json`);
   console.log(

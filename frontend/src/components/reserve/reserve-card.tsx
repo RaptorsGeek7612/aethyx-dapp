@@ -34,13 +34,13 @@ export function ReserveCard({ asset, index }: { asset: AssetDefinition; index: n
   // would under-report backing the moment anything is still open on a superseded manager.
   const { data: cdpCollaterals } = useReadContracts({
     allowFailure: true,
-    contracts: CDP_MANAGERS.map(({ address, legacy }) => ({
+    contracts: CDP_MANAGERS.map(({ address, legacyAbi }) => ({
       address,
       // Widened to plain Abi: legacy/current decode `collaterals` to differently-shaped tuples,
       // and a precise union of both makes indexed fields resolve to unhelpful cross-shape unions
       // (e.g. bigint | boolean) instead of narrowing per branch — see use-cdp.ts's useCdpPosition
       // for the same trade-off.
-      abi: (legacy ? cdpManagerLegacyAbi : cdpManagerAbi) as Abi,
+      abi: (legacyAbi ? cdpManagerLegacyAbi : cdpManagerAbi) as Abi,
       functionName: "collaterals" as const,
       args: [asset.id] as const,
     })),
@@ -51,8 +51,9 @@ export function ReserveCard({ asset, index }: { asset: AssetDefinition; index: n
   const perManagerCollateral = CDP_MANAGERS.map((manager, index) => {
     const result = cdpCollaterals?.[index]?.result as readonly unknown[] | undefined;
     const wrappedToken = (result?.[0] as Address | undefined) ?? ZERO_ADDRESS;
-    // Legacy's collaterals tuple has no liquidationBonusBps, so totalDebt sits one index earlier.
-    const totalDebt = (result?.[manager.legacy ? 5 : 6] as bigint | undefined) ?? 0n;
+    // The pre-finding-12 collaterals tuple has no liquidationBonusBps, so totalDebt sits one
+    // index earlier there — see CdpManagerRef.legacyAbi's own comment for which instances this is.
+    const totalDebt = (result?.[manager.legacyAbi ? 5 : 6] as bigint | undefined) ?? 0n;
     return { manager, wrappedToken, totalDebt, registered: wrappedToken !== ZERO_ADDRESS };
   });
   const cdpRegistered = perManagerCollateral.some((entry) => entry.registered);

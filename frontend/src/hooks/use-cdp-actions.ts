@@ -13,7 +13,12 @@ import { CDP_MANAGER_ADDRESS, STABLE_TOKEN_ADDRESS, type CdpManagerRef } from "@
 
 export type CdpStep = "idle" | "approving" | "submitting" | "confirming";
 
-const CURRENT_MANAGER: CdpManagerRef = { address: CDP_MANAGER_ADDRESS as Address, label: "Current", legacy: false };
+const CURRENT_MANAGER: CdpManagerRef = {
+  address: CDP_MANAGER_ADDRESS as Address,
+  label: "Current",
+  legacy: false,
+  legacyAbi: false,
+};
 
 function humanizeError(error: unknown): string {
   if (error instanceof BaseError) return error.shortMessage ?? error.message;
@@ -31,7 +36,7 @@ export function useCdpActions(manager: CdpManagerRef = CURRENT_MANAGER) {
   const { writeContractAsync } = useWriteContract();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<CdpStep>("idle");
-  const abi = manager.legacy ? cdpManagerLegacyAbi : cdpManagerAbi;
+  const abi = manager.legacyAbi ? cdpManagerLegacyAbi : cdpManagerAbi;
 
   const ensureAllowance = useCallback(
     async (token: Address, amount: bigint, currentAllowance: bigint) => {
@@ -158,7 +163,7 @@ export function useCdpActions(manager: CdpManagerRef = CURRENT_MANAGER) {
       await run(
         "Liquidation",
         () =>
-          manager.legacy
+          manager.legacyAbi
             ? writeContractAsync({
                 address: manager.address,
                 abi: cdpManagerLegacyAbi,
@@ -174,7 +179,7 @@ export function useCdpActions(manager: CdpManagerRef = CURRENT_MANAGER) {
         params.onSuccess,
       );
     },
-    [ensureAllowance, manager.address, manager.legacy, run, writeContractAsync],
+    [ensureAllowance, manager.address, manager.legacyAbi, run, writeContractAsync],
   );
 
   return { depositCollateral, withdrawCollateral, mintDebt, repayDebt, liquidate, step };

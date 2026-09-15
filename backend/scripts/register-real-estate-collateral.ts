@@ -24,7 +24,7 @@ import { network } from "hardhat";
 // After this, run update-real-estate-price.ts again after every deposit/redeem on this market —
 // registering it here does not make that maintenance step go away.
 
-const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V7";
+const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V8";
 // More conservative than GOLD's 150%/130% (register-silver-collateral.ts, deploy-cdp.ts): the
 // price behind this collateral can go stale or drift between operator updates in a way gold/
 // silver's live oracle feed can't, so more headroom is asked for up front. Placeholder demo
@@ -41,12 +41,12 @@ const chainId = (await ethers.provider.getNetwork()).chainId;
 const deploymentDir = `ignition/deployments/chain-${chainId}`;
 
 const deployed = JSON.parse(readFileSync(`${deploymentDir}/deployed_addresses.json`, "utf8")) as Record<string, string>;
-const accessManagerAddress = deployed["InvestOrGateway#AccessManager"];
-const oracleManagerAddress = deployed["InvestOrGateway#OracleManager"];
-const vaultManagerAddress = deployed["InvestOrGateway#VaultManager"];
+const accessManagerAddress = deployed["AethyxGateway#AccessManager"];
+const oracleManagerAddress = deployed["AethyxGateway#OracleManager"];
+const vaultManagerAddress = deployed["AethyxGateway#VaultManager"];
 const priceSourceAddresses = [
-  deployed["InvestOrGateway#priceSourcePrimary"],
-  deployed["InvestOrGateway#priceSourceSecondary"],
+  deployed["AethyxGateway#priceSourcePrimary"],
+  deployed["AethyxGateway#priceSourceSecondary"],
 ].filter((address): address is string => Boolean(address));
 
 const cdpRecord = JSON.parse(readFileSync(`${deploymentDir}/cdp.json`, "utf8")) as { cdpManager: string };

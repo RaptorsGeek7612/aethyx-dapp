@@ -63,7 +63,7 @@ export interface AssetDefinition {
 // self-transfer escape earlier versions (V6 and before) knowingly accepted. See
 // RealEstateAdapter.sol and AUDIT.md finding 1's "l'arbitrage a été retranché en faveur de la
 // sécurité" update for the full history.
-const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V7";
+const REAL_ESTATE_LABEL = "REAL_ESTATE_PARIS_01_V8";
 
 // VaultManager has no on-chain enumeration of registered assets (a deliberate simplicity
 // trade-off — see AssetAdapter.sol's lesson on the mapping-based registry). Until an indexer
@@ -112,9 +112,11 @@ export const ASSETS: AssetDefinition[] = [
     // five ways across the lock-up tiers precisely so summing them didn't multiply the building
     // by five.
     appraisalValueEur: 235_000,
-    // REAL_ESTATE_PARIS_01_V6 — still registered as CDP collateral on the legacy CDPManager
-    // (AUDIT.md finding 12's redeploy didn't migrate it). Lets the "Legacy" instance tab reach it.
-    legacyLabel: "REAL_ESTATE_PARIS_01_V6",
+    // REAL_ESTATE_PARIS_01_V7 — still registered as CDP collateral on the CDPManager that became
+    // legacy with the 2026-09-15 core protocol redeploy (AUDIT.md findings 2-6). Lets the
+    // "Legacy" instance tab reach it. Only the most recent legacy generation is reachable this
+    // way — legacyLabel is a single field, not a per-manager map — see AUDIT.md's note on this.
+    legacyLabel: "REAL_ESTATE_PARIS_01_V7",
     // Not "priced by oracle" in the gold/silver sense (there's no independent market price — see
     // computeValuation's real-estate branch, which never reads OracleManager). Set to true only
     // once backend/scripts/register-real-estate-collateral.ts has actually registered a price
@@ -150,6 +152,7 @@ export const LEGACY_ASSET_LABELS: Record<Hex, string> = {
   [assetIdFromLabel("REAL_ESTATE_PARIS_01_V4")]: "Paris Property #01 (legacy, market-wide lock-up)",
   [assetIdFromLabel("REAL_ESTATE_PARIS_01_V5")]: "Paris Property #01 (legacy, no lock-up)",
   [assetIdFromLabel("REAL_ESTATE_PARIS_01_V6")]: "Paris Property #01 (legacy, per-deposit maturity)",
+  [assetIdFromLabel("REAL_ESTATE_PARIS_01_V7")]: "Paris Property #01 (legacy, pre-AUDIT.md findings 2-6 protocol)",
   ...Object.fromEntries(
     RETIRED_LOCKUP_TIERS.map((key) => [
       assetIdFromLabel(`REAL_ESTATE_PARIS_01_${key}`),
